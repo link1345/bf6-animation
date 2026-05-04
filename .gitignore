@@ -1,0 +1,8 @@
+node_modules
+code/*
+dist/*
+test-support/*
+sdk
+
+!.gitkeep
+!Strings.json
