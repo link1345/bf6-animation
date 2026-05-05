@@ -3,7 +3,7 @@ import tseslint from "typescript-eslint";
 import { defineConfig } from "eslint/config";
 
 const ignoreConfig = {
-  ignores: ["**/*.{js,mjs,cjs}", "code/**"],
+  ignores: ["**/*.{js,mjs,cjs}", "code/**", "dist/**"],
 };
 
 
