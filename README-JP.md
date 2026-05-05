@@ -1,37 +1,30 @@
+# bf6-ui-anime
 
-# TypeScript Sample Template Program for Battlefield 6 Rule Editor
+[English version](./README.md)
 
-[※ Here is the English description of this repository.](./README.md)
+Battlefield 6 Portal のカスタム UI 向けに、タイムラインベースのアニメーションヘルパーを提供します。
 
-このリポジトリは、BFのルールエディタ機能をTypeScriptで書く時に使用すると、楽に書けるように設計されています。
+```ts
+import { timeline } from "bf6-ui-anime";
 
-下記の機能を持っています。
+await timeline()
+    .to(panel, { visible: true, x: 24, bgAlpha: 0.85 }, { duration: 0.35, ease: "outCubic" })
+    .to(title, { textAlpha: 1, textSize: 28 }, { duration: 0.25, ease: "outBack" })
+    .wait(2)
+    .to(panel, { x: -320, bgAlpha: 0, visible: false }, { duration: 0.3, ease: "inCubic" })
+    .play();
+```
 
-* githubにpushすると、自動でeslintで文法チェックが入ります。
-* `npm run build`を叩くと、複数のtsファイルを、1つのtsファイルにまとめる
-  * BF Portalルールエディタは、1つのtsファイルしか受け付けないため
-* `bfportal-vitest-mock`と`vitest`が導入済みなので、容易にユニットテストの使用出来ます。
-
-## インストール
-
-0. nodejsをインストールする。JSについて何も分からない人は、下記リンクの「x64アーキテクチャーで動作するWindows用のビルド済みのNode.js®も利用できます。」から`.msi`ファイルをダウンロードしてきて、環境することをお勧めします。
-  https://nodejs.org/ja/download
-1. このリポジトリをダウンロードしてくる。
-2. `code` フォルダに、Battlefield6公式から配布されているSDKの中の `PortalSDK/code` を入れる。
-3. `npm install`コマンドを叩く。
+このパッケージは、Portal の `mod.Wait`、UI の getter / setter、`mod.CreateVector` を使用します。
 
 ## 使い方
 
-1. `mods`フォルダに、プログラムを書く。
-2. 書き終わったら、`npm run build`コマンドを叩く。
-3. `dist/Script.ts`と`dist/String.json`をBF Portalのルールエディタに登録する。
-
-### 文字列の設定の仕方
-
-`dist/String.json`に載せたい文字列を登録します。
-
-### テストの使い方
-
-`bfportal-vitest-mock`パッケージを採用しています。導入・使い方は、下記をご確認ください。
-
-https://github.com/link1345/bfportal-vitest-mock
+0. [link1345/Battlefield6-SampleTemplate](https://github.com/link1345/Battlefield6-SampleTemplate)のような複数のファイルを統合できるBF6 TypeScriptテンプレートを使って
+1. `mods/bf6-ui-anime.ts`を、統合フォルダに入れる
+  - [link1345/Battlefield6-SampleTemplate](https://github.com/link1345/Battlefield6-SampleTemplate)ならば、`mods`フォルダに保存
+2. 好きにコーディングする。
+  - このリポジトリの`mods/Script.ts`にサンプルプログラムがある
+3. ファイルを統合する
+  - [link1345/Battlefield6-SampleTemplate](https://github.com/link1345/Battlefield6-SampleTemplate)ならば、`npm run build`で、1つのファイルを統合し、`dist`フォルダに出力される
+4. BF6 PortalのWebエディタに登録する
+  - [link1345/Battlefield6-SampleTemplate](https://github.com/link1345/Battlefield6-SampleTemplate)ならば、`dist`フォルダのtsファイルやjsonファイルを登録する

@@ -1,5 +1,7 @@
 # bf6-ui-anime
 
+[日本語版はこちら](./README-JP.md)
+
 Timeline-based animation helpers for Battlefield 6 Portal custom UI.
 
 ```ts
@@ -14,3 +16,15 @@ await timeline()
 ```
 
 The package uses Portal's `mod.Wait`, UI getters and setters, and `mod.CreateVector`. The repository build script inlines this package into `dist/Script.ts` when a mod imports `bf6-ui-anime`.
+
+## Usage
+
+0. Use a BF6 TypeScript template that can bundle multiple files, such as [link1345/Battlefield6-SampleTemplate](https://github.com/link1345/Battlefield6-SampleTemplate).
+1. Put `mods/bf6-ui-anime.ts` into the bundle folder.
+  - If you use [link1345/Battlefield6-SampleTemplate](https://github.com/link1345/Battlefield6-SampleTemplate), save it in the `mods` folder.
+2. Write your code as you like.
+  - This repository includes a sample program in `mods/Script.ts`.
+3. Bundle the files.
+  - If you use [link1345/Battlefield6-SampleTemplate](https://github.com/link1345/Battlefield6-SampleTemplate), `npm run build` bundles everything into one file and outputs it to the `dist` folder.
+4. Register the output in the BF6 Portal web editor.
+  - If you use [link1345/Battlefield6-SampleTemplate](https://github.com/link1345/Battlefield6-SampleTemplate), register the `.ts` and `.json` files from the `dist` folder.

@@ -78,9 +78,9 @@ type TimelineStep =
     | { type: "call"; fn: () => void | Promise<void> };
 
 const defaultTweenOptions: Required<Pick<TweenOptions, "duration" | "step">> & { ease: EaseName } = {
-    duration: 0.3,
+    duration: 0.3, // 0.3 seconds
     ease: "outCubic",
-    step: 1 / 30,
+    step: 1 / 15, // 15 FPS
 };
 
 function clamp01(value: number): number {
