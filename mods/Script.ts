@@ -1,4 +1,4 @@
-import { timeline } from "./bf6-ui-anime";
+import { uiTimeline } from "./bf6-ui-animation";
 
 export async function OnPlayerDeployed(eventPlayer: mod.Player) {
     const playerId = mod.GetObjId(eventPlayer);
@@ -6,7 +6,7 @@ export async function OnPlayerDeployed(eventPlayer: mod.Player) {
     const accentName = `deploy-accent-${playerId}`;
     const titleName = `deploy-title-${playerId}`;
 
-    console.log("LOG> OnPlayerDeployed bf6-ui-anime sample:", playerId);
+    console.log("LOG> OnPlayerDeployed bf6-animation sample:", playerId);
     await mod.Wait(0.1);
 
     if (mod.HasUIWidgetWithName(panelName)) {
@@ -65,7 +65,7 @@ export async function OnPlayerDeployed(eventPlayer: mod.Player) {
     const accent = mod.FindUIWidgetWithName(accentName, panel);
     const title = mod.FindUIWidgetWithName(titleName, panel);
 
-    await timeline()
+    await uiTimeline()
         .to(panel, { visible: true, x: 36, bgAlpha: 0.92 }, { duration: 0.35, ease: "outCubic" })
         .to(accent, { visible: true, width: 380, bgAlpha: 1 }, { duration: 0.22, ease: "outCubic" })
         .to(title, { textAlpha: 1, textSize: 30 }, { duration: 0.25, ease: "outBack" })

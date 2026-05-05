@@ -10,5 +10,11 @@
         "./code/modlib"
       ]
     }
-  }
+  },
+  "include": [
+    "**/*.ts",
+  ],
+  "exclude": [
+    "sample"
+  ]
 }

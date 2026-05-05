@@ -1,13 +1,13 @@
-# bf6-ui-anime
+# bf6-animation
 
 [English version](./README.md)
 
 Battlefield 6 Portal のカスタム UI 向けに、タイムラインベースのアニメーションヘルパーを提供します。
 
 ```ts
-import { timeline } from "bf6-ui-anime";
+import { uiTimeline } from "bf6-animation";
 
-await timeline()
+await uiTimeline()
     .to(panel, { visible: true, x: 24, bgAlpha: 0.85 }, { duration: 0.35, ease: "outCubic" })
     .to(title, { textAlpha: 1, textSize: 28 }, { duration: 0.25, ease: "outBack" })
     .wait(2)
@@ -20,7 +20,7 @@ await timeline()
 ## 使い方
 
 0. [link1345/Battlefield6-SampleTemplate](https://github.com/link1345/Battlefield6-SampleTemplate)のような複数のファイルを統合できるBF6 TypeScriptテンプレートを使って
-1. `mods/bf6-ui-anime.ts`を、統合フォルダに入れる
+1. `mods/bf6-animation.ts`を、統合フォルダに入れる
   - [link1345/Battlefield6-SampleTemplate](https://github.com/link1345/Battlefield6-SampleTemplate)ならば、`mods`フォルダに保存
 2. 好きにコーディングする。
   - このリポジトリの`mods/Script.ts`にサンプルプログラムがある
