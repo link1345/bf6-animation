@@ -36,8 +36,28 @@ export interface TweenOptions {
     step?: number;
 }
 
+export interface TimelineOptions extends TweenOptions {
+    loop?: boolean | number;
+}
+
+export interface UIPhysicsStepper {
+    step(dt: number): void;
+}
+
+export interface UIPhysicsOptions {
+    duration?: number;
+    step?: number;
+}
+
+export interface UITimelineItem {
+    target: mod.UIWidget;
+    props: TweenProps;
+}
+
 export interface Timeline {
     to(widget: mod.UIWidget, props: TweenProps, options?: TweenOptions): Timeline;
+    to(items: UITimelineItem[], options?: TweenOptions): Timeline;
+    physics(world: UIPhysicsStepper, options?: UIPhysicsOptions): Timeline;
     wait(seconds: number): Timeline;
     call(fn: () => void | Promise<void>): Timeline;
     play(): Promise<void>;
@@ -58,6 +78,8 @@ type VectorTween = {
 
 type TimelineStep =
     | { type: "to"; widget: mod.UIWidget; props: TweenProps; options?: TweenOptions }
+    | { type: "toMany"; items: UITimelineItem[]; options?: TweenOptions }
+    | { type: "physics"; world: UIPhysicsStepper; options?: UIPhysicsOptions }
     | { type: "wait"; seconds: number }
     | { type: "call"; fn: () => void | Promise<void> };
 
@@ -248,6 +270,62 @@ async function runTween(widget: mod.UIWidget, props: TweenProps, options: TweenO
     }
 }
 
+async function runManyTweens(items: UITimelineItem[], options: TweenOptions | undefined, shouldStop: () => boolean): Promise<void> {
+    for (const item of items) {
+        if (item.props.visible === true) mod.SetUIWidgetVisible(item.target, true);
+    }
+
+    const duration = options?.duration ?? defaultTweenOptions.duration;
+    const step = options?.step ?? defaultTweenOptions.step;
+    const ease = resolveEase(options?.ease);
+    const built = items.map((item) => ({ item, tweens: buildTweens(item.target, item.props) }));
+
+    if (duration <= 0) {
+        for (const entry of built) {
+            applyTweens(entry.tweens.numbers, entry.tweens.vectors, 1);
+            if (entry.item.props.visible === false) mod.SetUIWidgetVisible(entry.item.target, false);
+        }
+        return;
+    }
+
+    for (const entry of built) {
+        applyTweens(entry.tweens.numbers, entry.tweens.vectors, 0);
+    }
+
+    let elapsed = 0;
+    while (elapsed < duration && !shouldStop()) {
+        const waitSeconds = Math.min(step, duration - elapsed);
+        await mod.Wait(waitSeconds);
+        elapsed += waitSeconds;
+        const amount = ease(clamp01(elapsed / duration));
+        for (const entry of built) {
+            applyTweens(entry.tweens.numbers, entry.tweens.vectors, amount);
+        }
+    }
+
+    if (!shouldStop()) {
+        for (const entry of built) {
+            applyTweens(entry.tweens.numbers, entry.tweens.vectors, 1);
+            if (entry.item.props.visible === false) mod.SetUIWidgetVisible(entry.item.target, false);
+        }
+    }
+}
+
+async function runUIPhysics(world: UIPhysicsStepper, options: UIPhysicsOptions | undefined, shouldStop: () => boolean): Promise<void> {
+    const step = options?.step ?? defaultTweenOptions.step;
+    const duration = options?.duration ?? step;
+
+    if (duration <= 0 || step <= 0) return;
+
+    let elapsed = 0;
+    while (elapsed < duration && !shouldStop()) {
+        const waitSeconds = Math.min(step, duration - elapsed);
+        await mod.Wait(waitSeconds);
+        world.step(waitSeconds);
+        elapsed += waitSeconds;
+    }
+}
+
 export function uiAnimate(widget: mod.UIWidget): { to(props: TweenProps, options?: TweenOptions): Promise<void> } {
     return {
         to(props: TweenProps, options?: TweenOptions) {
@@ -256,13 +334,22 @@ export function uiAnimate(widget: mod.UIWidget): { to(props: TweenProps, options
     };
 }
 
-export function uiTimeline(options?: TweenOptions): Timeline {
+export function uiTimeline(options?: TimelineOptions): Timeline {
     const steps: TimelineStep[] = [];
     let stopped = false;
+    const loopCount = typeof options?.loop === "number" ? Math.max(0, Math.floor(options.loop)) : options?.loop === true ? Infinity : 1;
 
     const api: Timeline = {
-        to(widget: mod.UIWidget, props: TweenProps, tweenOptions?: TweenOptions) {
-            steps.push({ type: "to", widget, props, options: { ...options, ...tweenOptions } });
+        to(target: mod.UIWidget | UITimelineItem[], propsOrOptions?: TweenProps | TweenOptions, tweenOptions?: TweenOptions) {
+            if (Array.isArray(target)) {
+                steps.push({ type: "toMany", items: target, options: { ...options, ...(propsOrOptions as TweenOptions | undefined) } });
+            } else {
+                steps.push({ type: "to", widget: target, props: propsOrOptions as TweenProps, options: { ...options, ...tweenOptions } });
+            }
+            return api;
+        },
+        physics(world: UIPhysicsStepper, physicsOptions?: UIPhysicsOptions) {
+            steps.push({ type: "physics", world, options: physicsOptions });
             return api;
         },
         wait(seconds: number) {
@@ -275,15 +362,25 @@ export function uiTimeline(options?: TweenOptions): Timeline {
         },
         async play() {
             stopped = false;
-            for (const step of steps) {
-                if (stopped) return;
-                if (step.type === "to") {
-                    await runTween(step.widget, step.props, step.options, () => stopped);
-                } else if (step.type === "wait") {
-                    if (step.seconds > 0) await mod.Wait(step.seconds);
-                } else {
-                    await step.fn();
+            if (steps.length === 0 || loopCount <= 0) return;
+
+            let played = 0;
+            while (!stopped && played < loopCount) {
+                for (const step of steps) {
+                    if (stopped) return;
+                    if (step.type === "to") {
+                        await runTween(step.widget, step.props, step.options, () => stopped);
+                    } else if (step.type === "toMany") {
+                        await runManyTweens(step.items, step.options, () => stopped);
+                    } else if (step.type === "physics") {
+                        await runUIPhysics(step.world, step.options, () => stopped);
+                    } else if (step.type === "wait") {
+                        if (step.seconds > 0) await mod.Wait(step.seconds);
+                    } else {
+                        await step.fn();
+                    }
                 }
+                played += 1;
             }
         },
         stop() {

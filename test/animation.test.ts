@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { GravityBody, GravityWorld, objectGravityBody, runtimeObjectGravityBody, uiGravityBody } from "../mods/bf6-gravity";
 import { uiAnimate, uiTimeline } from "../mods/bf6-ui-animation";
-import { objectAnimate, objectTimeline } from "../mods/bf6-object-animation";
+import { RuntimeObject, objectAnimate, objectTimeline } from "../mods/bf6-object-animation";
 import { setupBfPortalMock, type BfPortalModMock } from "../test-support/bfportal-vitest-mock.generated";
 
 type TestVector = { x: number; y: number; z: number };
@@ -10,6 +11,7 @@ let widget: mod.UIWidget;
 let secondWidget: mod.UIWidget;
 let object: mod.Object;
 let secondObject: mod.Object;
+let spawnedObjects: mod.Object[];
 
 function fakeWidget(): mod.UIWidget {
     return { __test: true } as unknown as mod.UIWidget;
@@ -27,6 +29,42 @@ function vectorData(value: mod.Vector): TestVector {
     return value as unknown as TestVector;
 }
 
+function addValue(left: number, right: number): number;
+function addValue(left: mod.Vector, right: mod.Vector): mod.Vector;
+function addValue(left: number | mod.Vector, right: number | mod.Vector): number | mod.Vector {
+    if (typeof left === "number" && typeof right === "number") return left + right;
+
+    const leftData = vectorData(left as mod.Vector);
+    const rightData = vectorData(right as mod.Vector);
+    return vector(leftData.x + rightData.x, leftData.y + rightData.y, leftData.z + rightData.z);
+}
+
+function subtractValue(left: number, right: number): number;
+function subtractValue(left: mod.Vector, right: mod.Vector): mod.Vector;
+function subtractValue(left: number | mod.Vector, right: number | mod.Vector): number | mod.Vector {
+    if (typeof left === "number" && typeof right === "number") return left - right;
+
+    const leftData = vectorData(left as mod.Vector);
+    const rightData = vectorData(right as mod.Vector);
+    return vector(leftData.x - rightData.x, leftData.y - rightData.y, leftData.z - rightData.z);
+}
+
+function dotVector(left: mod.Vector, right: mod.Vector): number {
+    const leftData = vectorData(left);
+    const rightData = vectorData(right);
+    return leftData.x * rightData.x + leftData.y * rightData.y + leftData.z * rightData.z;
+}
+
+function normalizeVector(value: mod.Vector): mod.Vector {
+    const data = vectorData(value);
+    const length = Math.sqrt(data.x ** 2 + data.y ** 2 + data.z ** 2);
+    return vector(data.x / length, data.y / length, data.z / length);
+}
+
+function messageValue(message: string | number | mod.Player): mod.Message {
+    return String(message) as unknown as mod.Message;
+}
+
 beforeEach(() => {
     vi.resetAllMocks();
 
@@ -34,14 +72,30 @@ beforeEach(() => {
     secondWidget = fakeWidget();
     object = fakeObject();
     secondObject = fakeObject();
+    spawnedObjects = [];
 
     modMock = setupBfPortalMock({
         Wait: async () => undefined,
+        Add: addValue,
         CreateVector: (x: number, y: number, z: number) => vector(x, y, z),
         CreateTransform: (position: mod.Vector, rotation: mod.Vector) => ({ position, rotation }) as unknown as mod.Transform,
+        DotProduct: dotVector,
+        GetObjId: (target: mod.Object) => spawnedObjects.indexOf(target) + 1,
+        Message: messageValue,
+        Normalize: normalizeVector,
+        SendErrorReport: () => undefined,
+        SpawnObject: () => {
+            const spawned = fakeObject();
+            spawnedObjects.push(spawned);
+            return spawned as mod.Any;
+        },
+        Subtract: subtractValue,
+        UnspawnObject: () => undefined,
         XComponentOf: (value: mod.Vector) => vectorData(value).x,
         YComponentOf: (value: mod.Vector) => vectorData(value).y,
         ZComponentOf: (value: mod.Vector) => vectorData(value).z,
+        GetObjectPosition: (target: mod.Object) => target === secondObject ? vector(50, 60, 70) : vector(10, 20, 30),
+        GetObjectRotation: (target: mod.Object) => target === secondObject ? vector(5, 10, 15) : vector(1, 2, 3),
         GetObjectTransform: (target: mod.Object) => ({
             position: target === secondObject ? vector(50, 60, 70) : vector(10, 20, 30),
             rotation: target === secondObject ? vector(5, 10, 15) : vector(1, 2, 3),
@@ -94,6 +148,19 @@ describe("uiTimeline", () => {
 
         expect(vectorData(modMock.SetUIWidgetPosition.mock.calls[0][1])).toEqual({ x: 80, y: 120, z: 30 });
         expect(vectorData(modMock.SetUIWidgetSize.mock.calls[0][1])).toEqual({ x: 220, y: 40, z: 0 });
+    });
+
+    it("runs multiple UI tweens in the same to step", async () => {
+        await uiTimeline()
+            .to([
+                { target: widget, props: { x: 80 } },
+                { target: secondWidget, props: { textAlpha: 1 } },
+            ], { duration: 0.2, step: 0.2, ease: "linear" })
+            .play();
+
+        expect(modMock.Wait).toHaveBeenCalledTimes(1);
+        expect(vectorData(modMock.SetUIWidgetPosition.mock.calls[modMock.SetUIWidgetPosition.mock.calls.length - 1][1])).toEqual({ x: 80, y: 20, z: 30 });
+        expect(modMock.SetUITextAlpha).toHaveBeenLastCalledWith(secondWidget, 1);
     });
 
     it("routes alpha properties to the matching Portal setters", async () => {
@@ -159,6 +226,41 @@ describe("uiTimeline", () => {
         expect(modMock.SetUIWidgetBgAlpha).toHaveBeenCalledTimes(1);
         expect(modMock.SetUIWidgetBgAlpha).toHaveBeenCalledWith(widget, 1);
     });
+
+    it("replays steps for a finite loop count", async () => {
+        await uiTimeline({ loop: 3 })
+            .to(widget, { bgAlpha: 1 }, { duration: 0 })
+            .play();
+
+        expect(modMock.SetUIWidgetBgAlpha).toHaveBeenCalledTimes(3);
+    });
+
+    it("can stop an infinite loop from a call step", async () => {
+        const tl = uiTimeline({ loop: true });
+        let cycles = 0;
+        tl
+            .to(widget, { bgAlpha: 1 }, { duration: 0 })
+            .call(() => {
+                cycles += 1;
+                if (cycles === 2) tl.stop();
+            });
+
+        await tl.play();
+
+        expect(modMock.SetUIWidgetBgAlpha).toHaveBeenCalledTimes(2);
+    });
+
+    it("runs physics as a UI timeline step", async () => {
+        const world = new GravityWorld({ gravity: [0, 10, 0] })
+            .add(uiGravityBody(widget));
+
+        await uiTimeline()
+            .physics(world, { step: 0.2 })
+            .play();
+
+        expect(modMock.Wait).toHaveBeenCalledWith(0.2);
+        expect(vectorData(modMock.SetUIWidgetPosition.mock.calls[0][1])).toEqual({ x: 10, y: 20.4, z: 30 });
+    });
 });
 
 describe("objectTimeline", () => {
@@ -190,6 +292,19 @@ describe("objectTimeline", () => {
         expect(vectorData(lastTransform.rotation)).toEqual({ x: 1, y: 45, z: 3 });
     });
 
+    it("runs multiple object tweens in the same to step", async () => {
+        await objectTimeline()
+            .to([
+                { target: object, props: { x: 80 } },
+                { target: secondObject, props: { yaw: 90 } },
+            ], { duration: 0.2, step: 0.2, ease: "linear" })
+            .play();
+
+        expect(modMock.Wait).toHaveBeenCalledTimes(1);
+        expect(modMock.SetObjectTransform).toHaveBeenCalledWith(object, expect.anything());
+        expect(modMock.SetObjectTransform).toHaveBeenCalledWith(secondObject, expect.anything());
+    });
+
     it("enables objects at the start and disables objects at the end", async () => {
         await objectAnimate(object).to({ enabled: true, x: 20 }, { duration: 0 });
         await objectAnimate(secondObject).to({ enabled: false, x: 30 }, { duration: 0 });
@@ -209,5 +324,155 @@ describe("objectTimeline", () => {
 
         expect(modMock.SetObjectTransform).toHaveBeenCalledTimes(1);
         expect(modMock.SetObjectTransform.mock.calls[0][0]).toBe(object);
+    });
+
+    it("replays steps for a finite loop count", async () => {
+        await objectTimeline({ loop: 3 })
+            .to(object, { x: 100 }, { duration: 0 })
+            .play();
+
+        expect(modMock.SetObjectTransform).toHaveBeenCalledTimes(3);
+    });
+
+    it("can stop an infinite loop from a call step", async () => {
+        const tl = objectTimeline({ loop: true });
+        let cycles = 0;
+        tl
+            .to(object, { x: 100 }, { duration: 0 })
+            .call(() => {
+                cycles += 1;
+                if (cycles === 2) tl.stop();
+            });
+
+        await tl.play();
+
+        expect(modMock.SetObjectTransform).toHaveBeenCalledTimes(2);
+    });
+
+    it("moves a runtime object through objectTimeline.to", async () => {
+        const runtime = new RuntimeObject(undefined, [0, 0, 0], [0, 0, 0], [0, 1, 0], 0);
+
+        await objectTimeline()
+            .to(runtime, { moveBy: [0, 0, 9] }, { duration: 0.3, step: 0.1, ease: "linear" })
+            .play();
+
+        expect(vectorData(runtime.worldPos)).toEqual({ x: 0, y: 0, z: 9 });
+        expect(modMock.Wait).toHaveBeenCalledTimes(3);
+    });
+
+    it("combines parent movement with child rotation in the same runtime to step", async () => {
+        const parent = new RuntimeObject(undefined, [0, 0, 0], [0, 0, 0], [0, 1, 0], 0);
+        const child = parent.NewChild(undefined, [0, 0, 10], [0, 0, 0], [0, 1, 0], 0);
+
+        await objectTimeline()
+            .to([
+                { target: parent, props: { moveBy: [10, 0, 0] } },
+                { target: child, props: { qRotateBy: { axis: [0, 1, 0], angle: Math.PI / 2 } } },
+            ], { duration: 0 })
+            .play();
+
+        expect(vectorData(parent.worldPos)).toEqual({ x: 10, y: 0, z: 0 });
+        expect(vectorData(child.worldPos)).toEqual({ x: 10, y: 0, z: 10 });
+    });
+
+    it("removes runtime object children recursively", () => {
+        const parent = new RuntimeObject(1 as unknown as Parameters<typeof mod.SpawnObject>[0], [0, 0, 0], [0, 0, 0], [0, 1, 0], 0);
+        parent.NewChild(1 as unknown as Parameters<typeof mod.SpawnObject>[0], [0, 0, 10], [0, 0, 0], [0, 1, 0], 0);
+
+        parent.Remove();
+
+        expect(modMock.UnspawnObject).toHaveBeenCalledTimes(2);
+        expect(parent.children.size).toBe(0);
+    });
+
+    it("runs physics as an object timeline step", async () => {
+        const world = new GravityWorld({ gravity: [0, -10, 0] })
+            .add(objectGravityBody(object, { velocity: [0, 2, 0] }));
+
+        await objectTimeline()
+            .physics(world, { step: 0.5 })
+            .play();
+
+        const transform = modMock.SetObjectTransform.mock.calls[0][1] as unknown as { position: mod.Vector; rotation: mod.Vector };
+        expect(modMock.Wait).toHaveBeenCalledWith(0.5);
+        expect(vectorData(transform.position)).toEqual({ x: 10, y: 18.5, z: 30 });
+    });
+
+    it("runs object timeline physics over duration", async () => {
+        const world = new GravityWorld({ gravity: [0, -10, 0] })
+            .add(objectGravityBody(object));
+
+        await objectTimeline()
+            .physics(world, { duration: 0.3, step: 0.1 })
+            .play();
+
+        expect(modMock.Wait).toHaveBeenCalledTimes(3);
+        expect(modMock.SetObjectTransform).toHaveBeenCalledTimes(3);
+    });
+});
+
+describe("GravityWorld", () => {
+    it("steps custom gravity bodies with velocity plus gravity", () => {
+        let position = vector(0, 10, 0);
+        const body = new GravityBody({
+            getPosition: () => position,
+            setPosition: (next) => {
+                position = next;
+            },
+        }, { velocity: [2, 0, 0] });
+        const world = new GravityWorld({ gravity: [0, -10, 0] }).add(body);
+
+        world.step(0.5);
+
+        expect(vectorData(position)).toEqual({ x: 1, y: 7.5, z: 0 });
+        expect(vectorData(body.velocity)).toEqual({ x: 2, y: -5, z: 0 });
+    });
+
+    it("updates multiple UI bodies in one world step", () => {
+        const world = new GravityWorld({ gravity: [0, 10, 0] })
+            .add(uiGravityBody(widget))
+            .add(uiGravityBody(secondWidget, { velocity: [1, 0, 0] }));
+
+        world.step(0.2);
+
+        expect(vectorData(modMock.SetUIWidgetPosition.mock.calls[0][1])).toEqual({ x: 10, y: 20.4, z: 30 });
+        expect(vectorData(modMock.SetUIWidgetPosition.mock.calls[1][1])).toEqual({ x: 50.2, y: 60.4, z: 0 });
+    });
+
+    it("updates object bodies while preserving current rotation", () => {
+        const world = new GravityWorld({ gravity: [0, -10, 0] })
+            .add(objectGravityBody(object, { velocity: [0, 2, 0] }));
+
+        world.step(0.5);
+
+        const transform = modMock.SetObjectTransform.mock.calls[0][1] as unknown as { position: mod.Vector; rotation: mod.Vector };
+        expect(vectorData(transform.position)).toEqual({ x: 10, y: 18.5, z: 30 });
+        expect(vectorData(transform.rotation)).toEqual({ x: 1, y: 2, z: 3 });
+    });
+
+    it("updates runtime object bodies through Move and ApplyTransform", () => {
+        const runtime = new RuntimeObject(undefined, [0, 10, 0], [0, 0, 0], [0, 1, 0], 0);
+        const world = new GravityWorld({ gravity: [0, -10, 0] })
+            .add(runtimeObjectGravityBody(runtime, { velocity: [0, 2, 0] }));
+
+        world.step(0.5);
+
+        expect(vectorData(runtime.worldPos)).toEqual({ x: 0, y: 8.5, z: 0 });
+    });
+
+    it("clamps bodies at groundY and clears downward velocity", () => {
+        let position = vector(0, 1, 0);
+        const body = new GravityBody({
+            getPosition: () => position,
+            setPosition: (next) => {
+                position = next;
+            },
+        }, { velocity: [0, -20, 0], groundY: 0 });
+        const world = new GravityWorld({ gravity: [0, -10, 0] }).add(body);
+
+        world.step(0.5);
+
+        expect(vectorData(position)).toEqual({ x: 0, y: 0, z: 0 });
+        expect(vectorData(body.velocity)).toEqual({ x: 0, y: 0, z: 0 });
     });
 });
