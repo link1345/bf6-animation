@@ -26,6 +26,12 @@ function getAllScriptFiles(dir) {
     return files;
 }
 
+function removeStaticImports(content) {
+    return content
+        .replace(/^\s*import\s+(?:type\s+)?[\s\S]*?\s+from\s+["'][^"']+["'];\s*/gm, "")
+        .replace(/^\s*import\s+["'][^"']+["'];\s*/gm, "");
+}
+
 /**
  * 複数の .ts/.js ファイルを1つにまとめる（importを統一）
  * @param {string} inputDir 探索フォルダ
@@ -38,8 +44,7 @@ async function mergeTSRecursive(inputDir, outputFile) {
     for (const file of files) {
         const content = fs.readFileSync(file, "utf-8");
 
-        const bodyPart = content
-            .replace(/^import .*?;$/gm, "")
+        const bodyPart = removeStaticImports(content)
             .trim()
             .replace(/\n{3,}/g, "\n\n"); // 空行を整理
 
