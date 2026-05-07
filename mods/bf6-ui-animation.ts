@@ -141,6 +141,11 @@ const defaultTweenOptions: Required<Pick<TweenOptions, "duration" | "step">> & {
     step: 1 / 15, // 15 FPS
 };
 
+// Last positions applied by this animation library.
+const widgetPositionCache = new Map<mod.UIWidget, mod.Vector>();
+// Last sizes applied by this animation library.
+const widgetSizeCache = new Map<mod.UIWidget, mod.Vector>();
+
 // Clamps a progress value to the 0..1 range.
 function clamp01(value: number): number {
     if (value < 0) return 0;
@@ -260,26 +265,32 @@ function buildTweens(widget: mod.UIWidget, props: TweenProps): { numbers: Number
     const vectors: VectorTween[] = [];
 
     // Current widget position.
-    const currentPosition = mod.GetUIWidgetPosition(widget);
+    const currentPosition = widgetPositionCache.get(widget) ?? mod.GetUIWidgetPosition(widget);
     // Target position built from props.
     const targetPosition = buildPositionTarget(currentPosition, props);
     if (targetPosition) {
         vectors.push({
             from: currentPosition,
             to: targetPosition,
-            apply: (value) => mod.SetUIWidgetPosition(widget, value),
+            apply: (value) => {
+                widgetPositionCache.set(widget, value);
+                mod.SetUIWidgetPosition(widget, value);
+            },
         });
     }
 
     // Current widget size.
-    const currentSize = mod.GetUIWidgetSize(widget);
+    const currentSize = widgetSizeCache.get(widget) ?? mod.GetUIWidgetSize(widget);
     // Target size built from props.
     const targetSize = buildSizeTarget(currentSize, props);
     if (targetSize) {
         vectors.push({
             from: currentSize,
             to: targetSize,
-            apply: (value) => mod.SetUIWidgetSize(widget, value),
+            apply: (value) => {
+                widgetSizeCache.set(widget, value);
+                mod.SetUIWidgetSize(widget, value);
+            },
         });
     }
 

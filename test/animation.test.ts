@@ -150,6 +150,18 @@ describe("uiTimeline", () => {
         expect(vectorData(modMock.SetUIWidgetSize.mock.calls[0][1])).toEqual({ x: 220, y: 40, z: 0 });
     });
 
+    it("uses the last animated size as the next width tween start", async () => {
+        await uiTimeline()
+            .to(widget, { size: [0, 40] }, { duration: 0 })
+            .to(widget, { width: 220 }, { duration: 0.2, step: 0.1, ease: "linear" })
+            .play();
+
+        const sizeCalls = modMock.SetUIWidgetSize.mock.calls.map((call) => vectorData(call[1]));
+        expect(sizeCalls).toContainEqual({ x: 0, y: 40, z: 0 });
+        expect(sizeCalls).toContainEqual({ x: 110, y: 40, z: 0 });
+        expect(sizeCalls[sizeCalls.length - 1]).toEqual({ x: 220, y: 40, z: 0 });
+    });
+
     it("runs multiple UI tweens in the same to step", async () => {
         await uiTimeline()
             .to([

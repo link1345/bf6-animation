@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { OnPlayerDeployed, OnPlayerJoinGame, OnPlayerUIButtonEvent, OnPlayerUndeploy } from "../mods/Script";
-import { sampleUiButtonFocusAnimation, sampleUiGaugeAnimation, sampleWeaponSwitchUiAnimation } from "../mods/Samples";
+import { sampleObjectFloatPhysics, sampleUiGaugeAnimation } from "../mods/Samples";
 import { createFake, setupBfPortalMock, type BfPortalModMock } from "../test-support/bfportal-vitest-mock.generated";
 
 import stringkeys from "../dist/Strings.json";
@@ -66,8 +66,7 @@ beforeEach(() => {
         GetUIWidgetPosition: () => vector(0, 0, 0),
         GetUIWidgetSize: (widget: mod.UIWidget) => {
             const name = widgetData(widget).name;
-            if (name === "sampleUiGaugeAnimation-100-fill") return vector(0, 24, 0);
-            if (name === "sampleUiButtonFocusAnimation-100-button") return vector(564, 96, 0);
+            if (name === "sampleUiGaugeAnimation-100-fill") return vector(24, 36, 0);
             return vector(100, 40, 0);
         },
         GetUIWidgetBgAlpha: () => 0,
@@ -179,11 +178,11 @@ describe("sample menu", () => {
             0,
             expect.anything(),
         );
-        expect(modMock.AddUIButton).toHaveBeenCalledTimes(12);
+        expect(modMock.AddUIButton).toHaveBeenCalledTimes(11);
         expect(modMock.EnableUIInputMode).toHaveBeenCalledWith(true, expect.anything());
         expect(modMock.EnableUIButtonEvent).toHaveBeenCalledWith(widgetNamed("sample-menu-100-button-ui-gauge"), 0, true);
         expect(modMock.EnableUIButtonEvent).toHaveBeenCalledWith(widgetNamed("sample-menu-100-button-ui-gauge"), 1, true);
-        expect(modMock.EnableUIButtonEvent).toHaveBeenCalledTimes(24);
+        expect(modMock.EnableUIButtonEvent).toHaveBeenCalledTimes(22);
         expect(modMock.AddUIText).toHaveBeenCalledWith(
             "sample-menu-100-button-ui-gauge-label",
             { x: 188, y: 72, z: 0 },
@@ -219,15 +218,16 @@ describe("sample menu", () => {
         expect(modMock.SetUITextColor).toHaveBeenCalledWith(widgetNamed("sample-menu-100-button-ui-gauge-label"), { x: 0, y: 0, z: 0 });
         expect(modMock.AddUIContainer).toHaveBeenCalledWith(
             "sampleUiGaugeAnimation-100-fill",
-            { x: 56, y: 92, z: 0 },
-            { x: 0, y: 24, z: 0 },
-            7,
+            { x: -368, y: -292, z: 0 },
+            { x: 24, y: 36, z: 0 },
+            3,
             expect.anything(),
             true,
             0,
-            { x: 0.2, y: 0.9, z: 0.55 },
-            0,
+            { x: 0.2, y: 0.75, z: 1 },
+            0.9,
             8,
+            0,
             expect.anything(),
         );
     });
@@ -341,6 +341,24 @@ describe("sample menu", () => {
 
         await OnPlayerUndeploy(createFake<mod.Player>());
     });
+
+    it("runs the floating object sample through physics", async () => {
+        await OnPlayerDeployed(createFake<mod.Player>());
+
+        await OnPlayerUIButtonEvent(
+            createFake<mod.Player>(),
+            widgetNamed("sample-menu-100-button-object-float"),
+            mod.UIButtonEvent.ButtonUp,
+        );
+
+        expect(modMock.SpawnObject).toHaveBeenCalledWith(
+            mod.RuntimeSpawn_Common.Crate_01_A,
+            { x: 10, y: 3.35, z: 22.2 },
+            { x: 0, y: 0, z: 0 },
+            { x: 2.1, y: 2.1, z: 2.1 },
+        );
+        expect(modMock.SetObjectTransform).toHaveBeenCalled();
+    });
 });
 
 describe("direct UI sample functions", () => {
@@ -349,104 +367,30 @@ describe("direct UI sample functions", () => {
 
         expect(modMock.AddUIContainer).toHaveBeenCalledWith(
             "sampleUiGaugeAnimation-100-fill",
-            { x: 56, y: 92, z: 0 },
-            { x: 0, y: 24, z: 0 },
-            7,
+            { x: -368, y: -292, z: 0 },
+            { x: 24, y: 36, z: 0 },
+            3,
             expect.anything(),
             true,
             0,
-            { x: 0.2, y: 0.9, z: 0.55 },
-            0,
+            { x: 0.2, y: 0.75, z: 1 },
+            0.9,
             8,
+            0,
             expect.anything(),
         );
-        expect(modMock.SetUIWidgetSize).toHaveBeenCalledWith(expect.anything(), { x: 728, y: 24, z: 0 });
-        const lastColorCall = modMock.SetUIWidgetBgColor.mock.calls[modMock.SetUIWidgetBgColor.mock.calls.length - 1];
-        expect(vectorData(lastColorCall[1])).toEqual({
-            x: 0.25,
-            y: 1,
-            z: expect.closeTo(0.45),
-        });
+        expect(modMock.SetUIWidgetSize).toHaveBeenCalledWith(widgetNamed("sampleUiGaugeAnimation-100-fill"), { x: 760, y: 36, z: 0 });
+        expect(modMock.SetUIWidgetPosition).toHaveBeenCalledWith(widgetNamed("sampleUiGaugeAnimation-100-fill"), { x: 0, y: -292, z: 0 });
+        expect(modMock.SetUIWidgetPosition).toHaveBeenCalledWith(widgetNamed("sampleUiGaugeAnimation-100-edge"), { x: 380, y: -292, z: 0 });
+        expect(modMock.SetUIWidgetBgColor.mock.calls).toContainEqual([
+            widgetNamed("sampleUiGaugeAnimation-100-fill"),
+            { x: 0.25, y: 1, z: expect.closeTo(0.45) },
+        ]);
     });
 
-    it("sampleUiButtonFocusAnimation creates and animates button states", async () => {
-        await sampleUiButtonFocusAnimation(createFake<mod.Player>());
+    it("sampleObjectFloatPhysics moves an object through physics", async () => {
+        await sampleObjectFloatPhysics(createFake<mod.Player>(), mod.RuntimeSpawn_Common.Crate_01_A);
 
-        expect(modMock.AddUIButton).toHaveBeenCalledWith(
-            "sampleUiButtonFocusAnimation-100-button",
-            { x: 48, y: 44, z: 0 },
-            { x: 564, y: 96, z: 0 },
-            7,
-            expect.anything(),
-            true,
-            0,
-            { x: 0.02, y: 0.05, z: 0.08 },
-            0.25,
-            8,
-            true,
-            { x: 0.18, y: 0.24, z: 0.32 },
-            0.65,
-            { x: 0.1, y: 0.1, z: 0.1 },
-            0.3,
-            { x: 0.4, y: 0.75, z: 1 },
-            0.95,
-            { x: 0.35, y: 0.95, z: 0.65 },
-            0.95,
-            { x: 1, y: 0.85, z: 0.2 },
-            1,
-            0,
-            expect.anything(),
-        );
-        expect(modMock.SetUIButtonColorBase).toHaveBeenCalledWith(expect.anything(), { x: 0.18, y: 0.5, z: 0.95 });
-        expect(modMock.SetUIButtonColorFocused).toHaveBeenCalledWith(expect.anything(), { x: 1, y: 0.78, z: 0.18 });
-        expect(modMock.AddUIText).toHaveBeenCalledWith(
-            "sampleUiButtonFocusAnimation-100-label",
-            { x: 48, y: 44, z: 0 },
-            { x: 564, y: 96, z: 0 },
-            3,
-            widgetNamed("sampleUiButtonFocusAnimation-100-panel"),
-            true,
-            0,
-            { x: 0, y: 0, z: 0 },
-            0,
-            5,
-            expect.anything(),
-            36,
-            { x: 1, y: 1, z: 1 },
-            0,
-            3,
-            0,
-            expect.anything(),
-        );
-    });
-
-    it("sampleWeaponSwitchUiAnimation uses a weapon image instead of an ammo icon", async () => {
-        await sampleWeaponSwitchUiAnimation(createFake<mod.Player>());
-
-        expect(modMock.AddUIWeaponImage).toHaveBeenCalledWith(
-            "sampleWeaponSwitchUiAnimation-100-weapon",
-            { x: 28, y: 42, z: 0 },
-            { x: 430, y: 150, z: 0 },
-            7,
-            mod.Weapons.AssaultRifle_M433,
-            widgetNamed("sampleWeaponSwitchUiAnimation-100-panel"),
-            expect.anything(),
-        );
-        expect(modMock.AddUIImage).not.toHaveBeenCalledWith(
-            "sampleWeaponSwitchUiAnimation-100-weapon",
-            expect.anything(),
-            expect.anything(),
-            expect.anything(),
-            expect.anything(),
-            expect.anything(),
-            expect.anything(),
-            expect.anything(),
-            expect.anything(),
-            expect.anything(),
-            expect.anything(),
-            expect.anything(),
-            expect.anything(),
-            expect.anything(),
-        );
+        expect(modMock.SetObjectTransform).toHaveBeenCalled();
     });
 });

@@ -1,6 +1,6 @@
 import { GravityWorld, objectGravityBody, runtimeObjectGravityBody, uiGravityBody } from "./bf6-gravity";
 import { RuntimeObject, RuntimeObjectPrefab, objectTimeline } from "./bf6-object-animation";
-import { uiTimeline } from "./bf6-ui-animation";
+import { uiTimeline, type TweenProps, type UITimelineItem } from "./bf6-ui-animation";
 
 // Prefab type used by the object sample functions.
 type SampleObjectPrefab = RuntimeObjectPrefab;
@@ -21,6 +21,11 @@ function samplePlayerId(eventPlayer: mod.Player): number {
 // Creates a mod.Vector with a default Z coordinate of zero.
 export function v(x: number, y: number, z = 0): mod.Vector {
     return mod.CreateVector(x, y, z);
+}
+
+// Creates a typed UI timeline item so TypeScript selects the multi-target overload.
+function uiItem(target: mod.UIWidget, props: TweenProps): UITimelineItem {
+    return { target, props };
 }
 
 // Calculates a point relative to the player using right/up/forward offsets.
@@ -261,90 +266,75 @@ export async function sampleUiGaugeAnimation(eventPlayer: mod.Player, control?: 
     const trackName = `sampleUiGaugeAnimation-${playerId}-track`;
     // Gauge fill widget name.
     const fillName = `sampleUiGaugeAnimation-${playerId}-fill`;
+    // Bright leading edge widget name.
+    const edgeName = `sampleUiGaugeAnimation-${playerId}-edge`;
     // Label text widget name.
     const labelName = `sampleUiGaugeAnimation-${playerId}-label`;
 
-    resetWidgets([panelName]);
+    resetWidgets([panelName, trackName, fillName, edgeName, labelName]);
 
-    // Gauge panel container.
-    const panel = addPanel(panelName, v(0, 150), v(840, 172), mod.UIAnchor.TopCenter, eventPlayer);
-    mod.AddUIContainer(trackName, v(56, 92), v(728, 24), mod.UIAnchor.TopLeft, panel, true, 0, v(0.2, 0.24, 0.28), 0.75, mod.UIBgFill.Solid, eventPlayer);
-    mod.AddUIContainer(fillName, v(56, 92), v(0, 24), mod.UIAnchor.TopLeft, panel, true, 0, v(0.2, 0.9, 0.55), 0, mod.UIBgFill.Solid, eventPlayer);
+    // Root-level gauge background. Center anchoring matches Portal's size animation behavior.
+    mod.AddUIContainer(panelName, v(0, -330), v(860, 168), mod.UIAnchor.Center, mod.GetUIRoot(), true, 8, v(0.02, 0.04, 0.07), 0.86, mod.UIBgFill.Solid, mod.UIDepth.AboveGameUI, eventPlayer);
+
+    // Track behind the fill bar.
+    mod.AddUIContainer(trackName, v(0, -292), v(760, 36), mod.UIAnchor.Center, mod.GetUIRoot(), true, 6, v(0.16, 0.2, 0.23), 0.92, mod.UIBgFill.Solid, mod.UIDepth.AboveGameUI, eventPlayer);
+    // Fill bar. Its center X moves as width changes so the left edge appears fixed.
+    mod.AddUIContainer(fillName, v(-368, -292), v(24, 36), mod.UIAnchor.Center, mod.GetUIRoot(), true, 0, v(0.2, 0.75, 1), 0.9, mod.UIBgFill.Solid, mod.UIDepth.AboveGameUI, eventPlayer);
+    // Bright marker at the current fill edge.
+    mod.AddUIContainer(edgeName, v(-356, -292), v(14, 58), mod.UIAnchor.Center, mod.GetUIRoot(), true, 0, v(1, 1, 1), 0.95, mod.UIBgFill.Solid, mod.UIDepth.AboveGameUI, eventPlayer);
+    // Gauge label text widget.// Gauge label text widget.
+    mod.AddUIText(labelName, v(0, -358), v(760, 54), mod.UIAnchor.Center, mod.GetUIRoot(), true, 0, v(0, 0, 0), 0, mod.UIBgFill.None, mod.Message(mod.stringkeys.sample_ui_gauge_label), 38, v(1, 1, 1), 0, mod.UIAnchor.Center, mod.UIDepth.AboveGameUI, eventPlayer);
+
     // Gauge label text widget.
-    const label = addText(labelName, panel, mod.stringkeys.sample_ui_gauge_label, v(52, 16), v(736, 52), 34, eventPlayer);
+    const panel = findWidget(panelName);
+    // Gauge label text widget.
+    const label = findWidget(labelName);
     // Gauge fill widget.
-    const fill = findWidget(fillName, panel);
+    const fill = findWidget(fillName);
+    // Bright leading edge widget.
+    const edge = findWidget(edgeName);
+    // Bright leading track widget.
+    const track = findWidget(trackName);
 
     if (control?.isCanceled()) return;
-    // Timeline that fills the gauge and then fades the panel out.
+    // Timeline that grows the bar while keeping its left side visually anchored.
     const timeline = uiTimeline()
-        .to(panel, { visible: true, bgAlpha: 0.88 }, { duration: 0.15, ease: "outCubic" })
-        .to(label, { textAlpha: 1 }, { duration: 0.1 })
-        .to(fill, { width: 240, bgAlpha: 1, bgColor: [0.2, 0.75, 1] }, { duration: 0.28, ease: "outCubic" })
-        .to(fill, { width: 528, bgColor: [0.95, 0.82, 0.2] }, { duration: 0.32, ease: "inOutCubic" })
-        .to(fill, { width: 728, bgColor: [0.25, 1, 0.45] }, { duration: 0.28, ease: "outBack" })
-        .wait(0.8)
-        .to(panel, { y: 96, bgAlpha: 0, visible: false }, { duration: 0.25, ease: "inCubic" });
-    control?.onCancel(() => timeline.stop());
-    await timeline.play();
-}
-
-// Demonstrates button color, alpha, and text focus animation.
-export async function sampleUiButtonFocusAnimation(eventPlayer: mod.Player, control?: SampleAnimationControl): Promise<void> {
-    // Player id used to make widget names unique.
-    const playerId = samplePlayerId(eventPlayer);
-    // Panel widget name.
-    const panelName = `sampleUiButtonFocusAnimation-${playerId}-panel`;
-    // Button widget name.
-    const buttonName = `sampleUiButtonFocusAnimation-${playerId}-button`;
-    // Button label widget name.
-    const labelName = `sampleUiButtonFocusAnimation-${playerId}-label`;
-
-    resetWidgets([panelName]);
-
-    // Panel containing the button demo.
-    const panel = addPanel(panelName, v(0, -240), v(660, 184), mod.UIAnchor.BottomCenter, eventPlayer);
-    mod.AddUIButton(
-        buttonName,
-        v(48, 44),
-        v(564, 96),
-        mod.UIAnchor.TopLeft,
-        panel,
-        true,
-        0,
-        v(0.02, 0.05, 0.08),
-        0.25,
-        mod.UIBgFill.Solid,
-        true,
-        v(0.18, 0.24, 0.32),
-        0.65,
-        v(0.1, 0.1, 0.1),
-        0.3,
-        v(0.4, 0.75, 1),
-        0.95,
-        v(0.35, 0.95, 0.65),
-        0.95,
-        v(1, 0.85, 0.2),
-        1,
-        mod.UIDepth.AboveGameUI,
-        eventPlayer,
-    );
-    // Button widget being animated.
-    const button = findWidget(buttonName, panel);
-    // Label text displayed over the button.
-    const label = addText(labelName, panel, mod.stringkeys.sample_ui_button_label, v(48, 44), v(564, 96), 36, eventPlayer);
-
-    if (control?.isCanceled()) return;
-    // Timeline that animates panel entry, button state colors, and exit.
-    const timeline = uiTimeline()
-        .to(panel, { visible: true, y: 64, bgAlpha: 0.78 }, { duration: 0.18, ease: "outCubic" })
         .to([
-            { target: button, props: { buttonAlphaBase: 0.95, buttonColorBase: [0.18, 0.5, 0.95] } },
-            { target: label, props: { textAlpha: 1, textSize: 42 } },
+            uiItem(panel, { position: [0, -330, 0], bgAlpha: 0.86, visible: true }),
+            uiItem(fill, { position: [-368, -292, 0], size: [24, 36], bgAlpha: 0.9, bgColor: [0.2, 0.75, 1] }),
+            uiItem(edge, { position: [-356, -292, 0], bgAlpha: 0.95, bgColor: [1, 1, 1] }),
+        ], { duration: 0 })
+        .to(panel, { y: -314, bgAlpha: 0.9 }, { duration: 0.18, ease: "outCubic" })
+        .to(label, { textAlpha: 1, textSize: 42 }, { duration: 0.16, ease: "outBack" })
+        .to([
+            uiItem(fill, { position: [-250, -292, 0], size: [260, 36], bgColor: [0.2, 0.75, 1], bgAlpha: 0.95 }),
+            uiItem(edge, { x: -120, bgColor: [0.65, 0.95, 1], bgAlpha: 1 }),
+        ], { duration: 0.32, ease: "outCubic" })
+        .to([
+            uiItem(fill, { position: [-110, -292, 0], size: [540, 36], bgColor: [0.95, 0.82, 0.2], bgAlpha: 0.98 }),
+            uiItem(edge, { x: 160, bgColor: [1, 0.92, 0.3] }),
+        ], { duration: 0.38, ease: "inOutCubic" })
+        .to([
+            uiItem(fill, { position: [-165, -292, 0], size: [430, 36], bgColor: [1, 0.38, 0.22] }),
+            uiItem(edge, { x: 50, bgColor: [1, 0.55, 0.35] }),
+        ], { duration: 0.2, ease: "inCubic" })
+        .to([
+            uiItem(fill, { position: [0, -292, 0], size: [760, 36], bgColor: [0.25, 1, 0.45], bgAlpha: 1 }),
+            uiItem(edge, { x: 380, bgColor: [0.72, 1, 0.82] }),
+            uiItem(label, { textColor: [0.25, 1, 0.72], textSize: 46 }),
+        ], { duration: 0.34, ease: "outBack" })
+        .to([
+            uiItem(fill, { bgAlpha: 0.78 }),
+            uiItem(edge, { bgAlpha: 0.72 }),
         ], { duration: 0.22, ease: "outCubic" })
-        .to(button, { buttonColorFocused: [1, 0.78, 0.18], buttonAlphaFocused: 1, buttonColorHover: [0.28, 0.95, 0.62] }, { duration: 0.25, ease: "outBack" })
-        .wait(0.8)
-        .to(panel, { y: -380, bgAlpha: 0, visible: false }, { duration: 0.25, ease: "inCubic" });
+        .wait(1)
+        .to([
+            uiItem(panel, { y: -350, bgAlpha: 0, visible: false }),
+            uiItem(fill, { bgAlpha: 0, visible: false }),
+            uiItem(edge, { bgAlpha: 0, visible: false }),
+            uiItem(label, { textAlpha: 0, visible: false }),
+            uiItem(track, { bgAlpha: 0, visible: false }),
+        ], { duration: 0.25, ease: "inCubic" });
     control?.onCancel(() => timeline.stop());
     await timeline.play();
 }
@@ -375,61 +365,13 @@ export async function sampleUiGravityBounce(eventPlayer: mod.Player, control?: S
     // Timeline that runs physics, expands the shadow, and fades both widgets out.
     const timeline = uiTimeline()
         .to(shadow, { bgAlpha: 0.12, width: 24 }, { duration: 0 })
-        .physics(gravity, { duration: 1.05, step: 1 / 30 })
+        .physics(gravity, { duration: 1.05, step: 1 / 15 })
         .to(shadow, { bgAlpha: 0.4, width: 128 }, { duration: 0.16, ease: "outCubic" })
         .wait(0.6)
         .to([
             { target: icon, props: { imageAlpha: 0, visible: false } },
             { target: shadow, props: { bgAlpha: 0, visible: false } },
         ], { duration: 0.2, ease: "inCubic" });
-    control?.onCancel(() => timeline.stop());
-    await timeline.play();
-}
-
-// Demonstrates a weapon switch UI animation with old/new labels and ammo text.
-export async function sampleWeaponSwitchUiAnimation(eventPlayer: mod.Player, control?: SampleAnimationControl): Promise<void> {
-    // Player id used to make widget names unique.
-    const playerId = samplePlayerId(eventPlayer);
-    // Panel widget name.
-    const panelName = `sampleWeaponSwitchUiAnimation-${playerId}-panel`;
-    // Old weapon label widget name.
-    const oldName = `sampleWeaponSwitchUiAnimation-${playerId}-old`;
-    // New weapon label widget name.
-    const newName = `sampleWeaponSwitchUiAnimation-${playerId}-new`;
-    // Ammo label widget name.
-    const ammoName = `sampleWeaponSwitchUiAnimation-${playerId}-ammo`;
-    // Weapon image widget name.
-    const iconName = `sampleWeaponSwitchUiAnimation-${playerId}-weapon`;
-
-    resetWidgets([panelName]);
-
-    // Panel containing all weapon switch UI elements.
-    const panel = addPanel(panelName, v(36, -300), v(960, 250), mod.UIAnchor.BottomLeft, eventPlayer);
-    // Text for the weapon being replaced.
-    const oldWeapon = addText(oldName, panel, mod.stringkeys.sample_weapon_old, v(500, 42), v(370, 60), 42, eventPlayer);
-    // Text for the newly selected weapon.
-    const newWeapon = addText(newName, panel, mod.stringkeys.sample_weapon_new, v(500, 42), v(370, 60), 42, eventPlayer);
-    // Ammo text shown during the switch.
-    const ammo = addText(ammoName, panel, mod.stringkeys.sample_weapon_ammo, v(500, 118), v(370, 60), 38, eventPlayer);
-    mod.AddUIWeaponImage(iconName, v(28, 42), v(430, 150), mod.UIAnchor.TopLeft, mod.Weapons.AssaultRifle_M433, panel, eventPlayer);
-    // Weapon icon widget.
-    const icon = findWidget(iconName, panel);
-
-    if (control?.isCanceled()) return;
-    // Timeline that shows old weapon data, swaps to new data, and hides the panel.
-    const timeline = uiTimeline()
-        .to(panel, { visible: true, y: 42, bgAlpha: 0.86 }, { duration: 0.22, ease: "outCubic" })
-        .to([
-            { target: oldWeapon, props: { textAlpha: 1 } },
-            { target: ammo, props: { textAlpha: 1 } },
-            { target: icon, props: { visible: true } },
-        ], { duration: 0.18 })
-        .wait(0.55)
-        .to(oldWeapon, { x: 430, textAlpha: 0 }, { duration: 0.14, ease: "inCubic" })
-        .to(newWeapon, { x: 500, textAlpha: 1, textSize: 54 }, { duration: 0.2, ease: "outBack" })
-        .to(ammo, { textColor: [0.25, 1, 0.6], textSize: 46 }, { duration: 0.18, ease: "outCubic" })
-        .wait(0.8)
-        .to(panel, { y: -300, bgAlpha: 0, visible: false }, { duration: 0.25, ease: "inCubic" });
     control?.onCancel(() => timeline.stop());
     await timeline.play();
 }
@@ -497,7 +439,7 @@ export async function sampleObjectGravityThrow(eventPlayer: mod.Player, prefab?:
 
     // Timeline that runs the physics simulation.
     const timeline = objectTimeline()
-        .physics(gravity, { duration: 1.2, step: 1 / 30 });
+        .physics(gravity, { duration: 1.2, step: 1 / 15 });
     control?.onCancel(() => timeline.stop());
     await timeline.play();
 }
@@ -527,7 +469,40 @@ export async function sampleRuntimeObjectGravity(eventPlayer: mod.Player, prefab
 
     // Timeline that runs the physics simulation.
     const timeline = objectTimeline()
-        .physics(gravity, { duration: 1, step: 1 / 30 });
+        .physics(gravity, { duration: 1, step: 1 / 15 });
+    control?.onCancel(() => timeline.stop());
+    await timeline.play();
+}
+
+// Demonstrates floating object motion driven only by physics acceleration.
+export async function sampleObjectFloatPhysics(eventPlayer: mod.Player, prefab?: SampleObjectPrefab, control?: SampleAnimationControl): Promise<void> {
+    // Player id used in logs.
+    const playerId = samplePlayerId(eventPlayer);
+    console.log("LOG> sampleObjectFloatPhysics:", playerId);
+
+    // Initial spawn point in front of the player.
+    const start = sampleObjectPoint(eventPlayer, 0, 1.35, 2.2);
+    // Object being moved by alternating physics acceleration.
+    const object = spawnSampleObject(prefab, start, v(0, 0, 0), v(2.1, 2.1, 2.1));
+    if (!object || control?.isCanceled()) return;
+
+    // Gravity world used as a simple vertical oscillator.
+    const gravity = new GravityWorld({ gravity: [0, 7.5, 0] })
+        .add(objectGravityBody(object, { velocity: [0, 1.2, 0] }));
+
+    // Timeline alternates gravity direction; no direct Y tween is used.
+    const timeline = objectTimeline()
+        .physics(gravity, { duration: 0.22, step: 1 / 15 })
+        .call(() => { gravity.gravity = [0, -8.5, 0]; })
+        .physics(gravity, { duration: 0.45, step: 1 / 15 })
+        .call(() => { gravity.gravity = [0, 8.5, 0]; })
+        .physics(gravity, { duration: 0.45, step: 1 / 15 })
+        .call(() => { gravity.gravity = [0, -8.5, 0]; })
+        .physics(gravity, { duration: 0.45, step: 1 / 15 })
+        .call(() => { gravity.gravity = [0, 8.5, 0]; })
+        .physics(gravity, { duration: 0.45, step: 1 / 15 })
+        .call(() => { gravity.gravity = [0, -8.5, 0]; })
+        .physics(gravity, { duration: 0.32, step: 1 / 15 });
     control?.onCancel(() => timeline.stop());
     await timeline.play();
 }

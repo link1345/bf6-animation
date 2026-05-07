@@ -1,17 +1,16 @@
 import { RuntimeObjectPrefab } from "./bf6-object-animation";
 import {
     sampleObjectGravityThrow,
+    sampleObjectFloatPhysics,
     sampleObjectMove,
     sampleObjectMultiPointMove,
     sampleObjectRotate,
     sampleRoundChangeUiAnimation,
     sampleRuntimeObjectGravity,
     sampleRuntimeObjectParentChild,
-    sampleUiButtonFocusAnimation,
     sampleUiGaugeAnimation,
     sampleUiGravityBounce,
     sampleUiSlideNotification,
-    sampleWeaponSwitchUiAnimation,
     SampleAnimationControl,
     v, findWidget,
 } from "./Samples";
@@ -71,9 +70,7 @@ function sampleEntries(): readonly SampleEntry[] {
     return [
         { id: "ui-slide", label: mod.stringkeys.sample_menu_button_ui_slide, selectedStatus: mod.stringkeys.sample_status_selected_ui_slide, runningStatus: mod.stringkeys.sample_status_running_ui_slide, run: sampleUiSlideNotification },
         { id: "ui-gauge", label: mod.stringkeys.sample_menu_button_ui_gauge, selectedStatus: mod.stringkeys.sample_status_selected_ui_gauge, runningStatus: mod.stringkeys.sample_status_running_ui_gauge, run: sampleUiGaugeAnimation },
-        { id: "ui-button", label: mod.stringkeys.sample_menu_button_ui_button, selectedStatus: mod.stringkeys.sample_status_selected_ui_button, runningStatus: mod.stringkeys.sample_status_running_ui_button, run: sampleUiButtonFocusAnimation },
         { id: "ui-gravity", label: mod.stringkeys.sample_menu_button_ui_gravity, selectedStatus: mod.stringkeys.sample_status_selected_ui_gravity, runningStatus: mod.stringkeys.sample_status_running_ui_gravity, run: sampleUiGravityBounce },
-        { id: "weapon-switch", label: mod.stringkeys.sample_menu_button_weapon, selectedStatus: mod.stringkeys.sample_status_selected_weapon, runningStatus: mod.stringkeys.sample_status_running_weapon, run: sampleWeaponSwitchUiAnimation },
         { id: "round-change", label: mod.stringkeys.sample_menu_button_round, selectedStatus: mod.stringkeys.sample_status_selected_round, runningStatus: mod.stringkeys.sample_status_running_round, run: sampleRoundChangeUiAnimation },
         { id: "object-move", label: mod.stringkeys.sample_menu_button_object_move, selectedStatus: mod.stringkeys.sample_status_selected_object_move, runningStatus: mod.stringkeys.sample_status_running_object_move, run: (eventPlayer, control) => sampleObjectMove(eventPlayer, sampleObjectPrefab(), control) },
         { id: "object-rotate", label: mod.stringkeys.sample_menu_button_object_rotate, selectedStatus: mod.stringkeys.sample_status_selected_object_rotate, runningStatus: mod.stringkeys.sample_status_running_object_rotate, run: (eventPlayer, control) => sampleObjectRotate(eventPlayer, sampleObjectPrefab(), control) },
@@ -81,6 +78,7 @@ function sampleEntries(): readonly SampleEntry[] {
         { id: "object-points", label: mod.stringkeys.sample_menu_button_object_points, selectedStatus: mod.stringkeys.sample_status_selected_object_points, runningStatus: mod.stringkeys.sample_status_running_object_points, run: (eventPlayer, control) => sampleObjectMultiPointMove(eventPlayer, sampleObjectPrefab(), control) },
         { id: "object-throw", label: mod.stringkeys.sample_menu_button_object_throw, selectedStatus: mod.stringkeys.sample_status_selected_object_throw, runningStatus: mod.stringkeys.sample_status_running_object_throw, run: (eventPlayer, control) => sampleObjectGravityThrow(eventPlayer, sampleObjectPrefab(), control) },
         { id: "runtime-gravity", label: mod.stringkeys.sample_menu_button_runtime_gravity, selectedStatus: mod.stringkeys.sample_status_selected_runtime_gravity, runningStatus: mod.stringkeys.sample_status_running_runtime_gravity, run: (eventPlayer, control) => sampleRuntimeObjectGravity(eventPlayer, sampleObjectPrefab(), control) },
+        { id: "object-float", label: mod.stringkeys.sample_menu_button_object_float, selectedStatus: mod.stringkeys.sample_status_selected_object_float, runningStatus: mod.stringkeys.sample_status_running_object_float, run: (eventPlayer, control) => sampleObjectFloatPhysics(eventPlayer, sampleObjectPrefab(), control) },
     ];
 }
 
