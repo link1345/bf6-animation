@@ -24,6 +24,7 @@ This is not a replacement for the game engine's physics. It is a lightweight pre
 - The more elements you animate, the higher the server load becomes. For information shared by all players, create UI without a `receiver`. For team-shared information, pass a `Team` to the `receiver` argument of APIs such as `AddUIContainer`. If UI does not need to be player-specific, prefer shared display.
 - The default `step` is `1 / 15`. Smaller steps look smoother, but they increase the number of Portal updates and therefore increase server load.
 - `GravityWorld` updates each registered body once, so its cost is `O(N)`. It does not provide collision detection or pushing between objects.
+- Some BF6 Portal objects have the game's default physics. Even if script code temporarily keeps an object floating in the air, the object may fall to the ground through game-side physics once the scripted position updates stop.
 - UI Y coordinates and world Y coordinates may use different directions. The UI falling sample treats positive Y as downward, while the object throwing sample uses negative Y as gravity.
 
 ## File Layout
