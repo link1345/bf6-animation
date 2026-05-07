@@ -19,6 +19,13 @@ Portal SDK 1.2.3.0 の型情報で、`mod.Wait`、UI 作成/更新 API、ボタ�
 
 これはゲームエンジン本体の物理を置き換えるものではありません。スクリプトから座標や表示状態を小刻みに更新する、演出用の軽量な仕組みです。
 
+## 注意点
+
+- アニメーションさせる要素が多いほど、サーバーへの負荷が高くなります。全プレイヤーで共有できる情報は `receiver` を指定せずに作成し、チーム単位で共有できる情報は `AddUIContainer` などの `receiver` 引数に `Team` を渡してください。プレイヤーごとに個別表示する必要がない UI は、できるだけ共有表示に寄せるのがおすすめです。
+- `step` の既定値は `1 / 15` です。 **細かくすると滑らかになりますが、Portal 上での更新回数が増えてサーバーへの負荷が増えます。**
+- `GravityWorld` は登録された body を1つずつ更新するだけなので計算量は `O(N)` です。 **物体同士の衝突判定や押し合いはありません。**
+- UI の Y 座標とワールドの Y 座標では、向きの考え方が違う場合があります。UI の落下サンプルでは正の Y を下向き、オブジェクトの投擲サンプルでは負の Y を重力方向として扱っています。
+
 ## ファイル構成
 
 ```text
@@ -34,7 +41,11 @@ dist/
   Strings.json             Portal に登録する文字列
 ```
 
-## 使い方
+### 使い方(自分のプログラムにこのアニメーションスクリプトを組み込む)
+
+自分のプログラムにこのアニメーションスクリプトを組み込む場合は、複数ファイルを統合できる BF6 Portal 用テンプレートを使うのがおすすめです。たとえば `deluca-mike/bf6-portal-scripting-template` や `link1345/Battlefield6-SampleTemplate` のようなテンプレートを使い、作業フォルダに `mods/bf6-*.ts` を入れて、Portal エディタへソースコードを登録する段階でファイルを統合してください。`mods/bf6-*.ts` 群は行数が多いため、コーディング中から1つのファイルへまとめて管理するのはおすすめしません。
+
+## 使い方(サンプル)
 
 1. 依存関係を入れます。
 
@@ -53,8 +64,6 @@ npm run build
 4. Portal で体験を開始します。プレイヤーが出撃すると、画面左上にサンプルメニューが表示されます。
 
 `mergeScript.js` は `mods` 配下の `.ts` ファイルを読み、静的 import を取り除いて `dist/Script.ts` にまとめます。Portal 側へアップロードするのは `mods` 配下の個別ファイルではなく、ビルド後の `dist/Script.ts` です。
-
-自分のプログラムにこのアニメーションスクリプトを組み込む場合は、複数ファイルを統合できる BF6 Portal 用テンプレートを使うのがおすすめです。たとえば `deluca-mike/bf6-portal-scripting-template` や `link1345/Battlefield6-SampleTemplate` のようなテンプレートを使い、作業フォルダに `mods/bf6-*.ts` を入れて、Portal エディタへソースコードを登録する段階でファイルを統合してください。`mods/bf6-*.ts` 群は行数が多いため、コーディング中から1つのファイルへまとめて管理するのはおすすめしません。
 
 ## Portal 側で使っている主なAPI
 
@@ -166,39 +175,12 @@ export async function OnPlayerDeployed(eventPlayer: mod.Player): Promise<void> {
 
 ## サンプルの動作
 
-`mods/Script.ts` はプレイヤーごとにサンプルメニューを作ります。出撃すると左上にボタンが並び、ボタンを押すと対応するサンプルが実行されます。別のボタンを押すと、実行中のサンプルを止めてから新しいサンプルを開始します。
+- サンプルはプレイヤーIDを widget 名に含め、複数プレイヤーで名前が衝突しにくいようにしています。
+- 実行中のサンプルを止めるため、各サンプルは `control?.onCancel(() => timeline.stop())` を登録しています。
 
-中心になる流れはこれです。
+### UI SLIDE
 
-```ts
-export async function OnPlayerDeployed(eventPlayer: mod.Player) {
-    await mod.Wait(0.1);
-    createSampleMenu(eventPlayer);
-}
-
-export async function OnPlayerUIButtonEvent(
-    eventPlayer: mod.Player,
-    eventUIWidget: mod.UIWidget,
-    eventUIButtonEvent: mod.UIButtonEvent,
-) {
-    runSampleFromButton(eventPlayer, mod.GetUIWidgetName(eventUIWidget));
-}
-```
-
-ボタンの一覧は `sampleEntries()` にまとまっています。ここへ項目を足すと、メニューに新しいサンプルを追加できます。
-
-```ts
-function sampleEntries(): readonly SampleEntry[] {
-    return [
-        { id: "ui-slide", label: mod.stringkeys.sample_menu_button_ui_slide, selectedStatus: mod.stringkeys.sample_status_selected_ui_slide, runningStatus: mod.stringkeys.sample_status_running_ui_slide, run: sampleUiSlideNotification },
-        { id: "object-move", label: mod.stringkeys.sample_menu_button_object_move, selectedStatus: mod.stringkeys.sample_status_selected_object_move, runningStatus: mod.stringkeys.sample_status_running_object_move, run: (eventPlayer, control) => sampleObjectMove(eventPlayer, sampleObjectPrefab(), control) },
-    ];
-}
-```
-
-実際のファイルには、上の2つ以外にも UI ゲージ、UI 重力、ラウンド表示、オブジェクト回転、親子オブジェクト、放物線移動などのサンプルが入っています。
-
-## UI SLIDE
+![slide image](./docs/image/sample1.gif)
 
 右上に横長の通知パネルが滑り込んできます。細いアクセントバーが伸び、タイトル文字が少し跳ねるように大きくなってから、全体が左へ抜けて消えます。
 
@@ -226,7 +208,10 @@ export async function sampleUiSlideNotification(eventPlayer: mod.Player, control
 }
 ```
 
-## UI GAUGE
+### UI GAUGE
+
+![image2](./docs/image/sample2.gif)
+
 
 画面中央付近にゲージが出て、バーが段階的に伸びます。青から黄色、赤、最後に緑へ色が変わるので、チャージや目標進行度の演出に向いています。
 
@@ -247,9 +232,11 @@ const timeline = uiTimeline()
 
 `fill` の幅だけを変えると中心基準で広がって見えるため、サンプルでは `position` と `size` を同時に動かし、左端が固定されているように見せています。
 
-## UI GRAVITY
+### UI GRAVITY
 
-クエスチョンマークの画像が斜め上から落ちてきます。落下後に影が広がり、アイコンと影がフェードアウトします。動きは `GravityWorld` が担当し、タイムラインは「物理を一定時間進める」「影を広げる」「消す」という順番を管理します。
+![image3](./docs/image/sample3.gif)
+
+クエスチョンマークが斜め上から落ちてきます。落下後に影が広がり、アイコンと影がフェードアウトします。動きは `GravityWorld` が担当し、タイムラインは「物理を一定時間進める」「影を広げる」「消す」という順番を管理します。
 
 ```ts
 const gravity = new GravityWorld({ gravity: [0, 920, 0] })
@@ -268,7 +255,9 @@ const timeline = uiTimeline()
 
 UI 座標では Y が下向きに増える前提で、重力を正の Y、上向き初速を負の Y にしています。
 
-## ROUND UI
+### ROUND UI
+
+![image4](./docs/image/sample4.gif)
 
 画面中央にラウンド切り替え風の大型表示が出ます。横線が左右へ伸び、タイトルとサブタイトルが表示され、少し待ってから縮むように消えます。
 
@@ -286,7 +275,9 @@ const timeline = uiTimeline()
     ], { duration: 0.22, ease: "inCubic" });
 ```
 
-## OBJ MOVE
+### OBJ MOVE
+
+![image5](./docs/image/sample5.gif)
 
 プレイヤーの前に箱を出し、左右と上下に移動させます。`sampleObjectPoint()` はプレイヤーの現在位置と向きから、右、上、前方のオフセットを計算します。
 
@@ -308,7 +299,9 @@ const forwardX = mod.XComponentOf(facing) / facingLength;
 const forwardZ = mod.ZComponentOf(facing) / facingLength;
 ```
 
-## OBJ ROTATE
+### OBJ ROTATE
+
+![image6](./docs/image/sample6.gif)
 
 箱をプレイヤーの前に出し、ヨー回転、ピッチとロールの傾き、最後に一回転を順番に見せます。Portal のオブジェクト回転は `mod.Vector` の X/Y/Z 成分で扱われ、このライブラリでは `pitch`、`yaw`、`roll` として指定できます。
 
@@ -319,7 +312,9 @@ const timeline = objectTimeline()
     .to(object, { rotation: [0, Math.PI * 2, 0] }, { duration: 0.6, ease: "linear" });
 ```
 
-## OBJ PARENT
+### OBJ PARENT
+
+![image7](./docs/image/sample7.gif)
 
 `RuntimeObject` の親子関係を見せるサンプルです。大きい箱を親、小さい箱を子として作り、親が前へ動く間に子だけが回転します。その後、親全体を回転させるため、子も親に追従します。
 
@@ -337,7 +332,10 @@ const timeline = objectTimeline()
 
 `RuntimeObject` の回転はクォータニオンで内部管理し、最後に Portal の `mod.SetObjectTransform` へ反映します。
 
-## OBJ POINTS
+### OBJ POINTS
+
+![image8](./docs/image/sample8.gif)
+
 
 箱が複数の点を渡り歩くサンプルです。短い `wait(0.1)` を挟むことで、ただの直線移動ではなく、点を踏んで跳ねるようなテンポになります。
 
@@ -351,7 +349,9 @@ const timeline = objectTimeline()
     .to(object, { position: sampleObjectPointArray(eventPlayer, 0, 1.2, 3.2) }, { duration: 0.5, ease: "inOutCubic" });
 ```
 
-## OBJ THROW
+### OBJ THROW
+
+![image9](./docs/image/sample9.gif)
 
 通常の `mod.Object` に `GravityWorld` を接続して、前方へ投げるような放物線を作ります。ワールド座標の Y は上方向として扱っているため、重力は負の Y です。
 
@@ -368,7 +368,9 @@ await objectTimeline()
     .play();
 ```
 
-## RT GRAVITY
+### RT GRAVITY
+
+![image10](./docs/image/sample10.gif)
 
 親子構成の `RuntimeObject` 全体を重力で落とします。`runtimeObjectGravityBody()` が `GravityWorld` と `RuntimeObject` の間をつなぎ、移動量を `object.Move(delta)` と `object.ApplyTransform()` に変換します。
 
@@ -384,7 +386,9 @@ await objectTimeline()
     .play();
 ```
 
-## OBJ FLOAT
+### OBJ FLOAT
+
+![image11](./docs/image/sample11.gif)
 
 直接 Y 座標を tween せず、重力方向を途中で反転させて、箱がふわふわ浮くような動きを作ります。`call()` はタイムラインの途中で値を書き換えたい時に使います。
 
@@ -399,12 +403,3 @@ const timeline = objectTimeline()
     .call(() => { gravity.gravity = [0, 8.5, 0]; })
     .physics(gravity, { duration: 0.45, step: 1 / 15 });
 ```
-
-## 注意点
-
-- `step` の既定値は `1 / 15` です。細かくすると滑らかになりますが、Portal 上での更新回数が増えます。
-- `GravityWorld` は登録された body を1つずつ更新するだけなので計算量は `O(N)` です。物体同士の衝突判定や押し合いはありません。
-- UI の Y 座標とワールドの Y 座標では、向きの考え方が違う場合があります。UI の落下サンプルでは正の Y を下向き、オブジェクトの投擲サンプルでは負の Y を重力方向として扱っています。
-- サンプルはプレイヤーIDを widget 名に含め、複数プレイヤーで名前が衝突しにくいようにしています。
-- 実行中のサンプルを止めるため、各サンプルは `control?.onCancel(() => timeline.stop())` を登録しています。
-- `dist/Strings.json` は Portal に登録する文字列です。`mod.stringkeys.*` を増やす場合は、対応するキーをここにも追加してください。
