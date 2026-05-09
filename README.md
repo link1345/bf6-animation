@@ -8,6 +8,14 @@ The animation script files are `mods/bf6-*.ts`. In this repository, the sample i
 
 The API notes in this README were checked against Portal SDK 1.2.3.0 types, including `mod.Wait`, UI creation/update APIs, button events, `mod.SpawnObject`, and `mod.SetObjectTransform`.
 
+## Questions / Support
+
+If you have questions or feedback, feel free to contact me on the PlumRice Discord server 😄
+
+Please use the appropriate thread/channel for discussions related to this project.
+
+https://discord.gg/Zy65k8AxH2
+
 ## Features
 
 - `uiTimeline()` animates UIWidget position, size, background color, alpha, text, image, and button color properties in sequence.

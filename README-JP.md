@@ -8,6 +8,14 @@ BF6 Portal の TypeScript で、UI とスポーンオブジェクトをタイム
 
 Portal SDK 1.2.3.0 の型情報で、`mod.Wait`、UI 作成/更新 API、ボタンイベント、`mod.SpawnObject`、`mod.SetObjectTransform` などを確認しています。
 
+## Questions / Support
+
+ご質問やご意見がありましたら、PlumRiceのDiscordサーバーでお気軽にご連絡ください
+
+このプロジェクトに関する議論は、適切なスレッド／チャンネルをご利用ください。
+
+https://discord.gg/Zy65k8AxH2
+
 ## できること
 
 - `uiTimeline()` で UIWidget の位置、サイズ、背景色、透明度、文字、画像、ボタン色などを順番にアニメーションできます。
