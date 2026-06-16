@@ -317,14 +317,6 @@ describe("objectTimeline", () => {
         expect(modMock.SetObjectTransform).toHaveBeenCalledWith(secondObject, expect.anything());
     });
 
-    it("enables objects at the start and disables objects at the end", async () => {
-        await objectAnimate(object).to({ enabled: true, x: 20 }, { duration: 0 });
-        await objectAnimate(secondObject).to({ enabled: false, x: 30 }, { duration: 0 });
-
-        expect(modMock.EnableSpatialObject.mock.calls[0]).toEqual([object, true]);
-        expect(modMock.EnableSpatialObject.mock.calls[modMock.EnableSpatialObject.mock.calls.length - 1]).toEqual([secondObject, false]);
-    });
-
     it("stops before running remaining steps", async () => {
         const tl = objectTimeline();
         tl

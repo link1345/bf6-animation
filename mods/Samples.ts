@@ -200,6 +200,48 @@ export async function sampleRuntimeObjectParentChild(eventPlayer: mod.Player, pr
     await timeline.play();
 }
 
+// Demonstrates two flat boards where the right board rotates around the left-center of the first board.
+export async function sampleRuntimeObjectHingedBoards(eventPlayer: mod.Player, prefab?: SampleObjectPrefab, control?: SampleAnimationControl): Promise<void> {
+    // Player id used in logs.
+    const playerId = samplePlayerId(eventPlayer);
+    console.log("LOG> sampleRuntimeObjectHingedBoards:", playerId);
+
+    if (prefab === undefined || control?.isCanceled()) {
+        console.log("LOG> Hinged board sample skipped. Pass a RuntimeSpawn prefab to spawn the boards.");
+        return;
+    }
+
+    // The first board's left-center point. This is the rotation axis for the second board.
+    const hinge = sampleObjectPointArray(eventPlayer, -1.8, 1, 3.2);
+    // World-space centers for two boards laid out left-to-right in front of the player.
+    const firstCenter = sampleObjectPointArray(eventPlayer, -1.0, 1, 3.2);
+    const secondCenter = sampleObjectPointArray(eventPlayer, 0.65 * 2, 1, 3.2);
+
+    // First board starts at the hinge side and rotates around its own left-center.
+    const firstBoard = new RuntimeObject(prefab, firstCenter, [0, 0, 0], [0, 1, 0], 0, [2, 2, 2]);
+    // Second board starts to the right of the first board, then swings around the first board's left-center.
+    const secondBoard = new RuntimeObject(prefab, secondCenter, [0, 0, 0], [0, 1, 0], 0, [2, 2, 2]);
+
+    // Timeline rotates both boards around the same hinge point.
+    const timeline = objectTimeline({ loop: true })
+        .wait(4)
+        .to([
+            { target: firstBoard, props: { qRotateBy: { axis: [0, 1, 0], angle: Math.PI / 2, rotCenter: hinge } } },
+            { target: secondBoard, props: { qRotateBy: { axis: [0, 1, 0], angle: Math.PI / 2, rotCenter: hinge } } },
+        ], { duration: 1.2, ease: "inOutCubic", step: 1 / 20 })
+        .wait(6)
+        .to([
+            { target: firstBoard, props: { qRotateBy: { axis: [0, 1, 0], angle: -Math.PI / 2, rotCenter: hinge } } },
+            { target: secondBoard, props: { qRotateBy: { axis: [0, 1, 0], angle: -Math.PI / 2, rotCenter: hinge } } },
+        ], { duration: 1.0, ease: "inOutCubic", step: 1 / 20 });
+    control?.onCancel(() => {
+        timeline.stop();
+        firstBoard.Remove();
+        secondBoard.Remove();
+    });
+    await timeline.play();
+}
+
 // Demonstrates object movement across multiple points with waits between segments.
 export async function sampleObjectMultiPointMove(eventPlayer: mod.Player, prefab?: SampleObjectPrefab, control?: SampleAnimationControl): Promise<void> {
     // Player id used in logs.

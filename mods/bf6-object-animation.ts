@@ -349,8 +349,6 @@ export interface ObjectTweenProps {
     roll?: number;
     // Changes the full rotation vector.
     rotation?: VectorLike;
-    // Toggles the SpatialObject enabled state.
-    enabled?: boolean;
 }
 
 // Settings for duration, easing, and update interval of one object tween.
@@ -585,10 +583,6 @@ function applyObjectTweens(vectors: ObjectVectorTween[], amount: number): void {
 
 // Runs a tween for one mod.Object.
 async function runObjectTween(object: mod.Object, props: ObjectTweenProps, options: ObjectTweenOptions | undefined, shouldStop: () => boolean): Promise<void> {
-    if (props.enabled === true) {
-        mod.EnableSpatialObject(object as mod.SpatialObject, true);
-    }
-
     // Playback duration in seconds.
     const duration = options?.duration ?? objectDefaultTweenOptions.duration;
     // Time interval between value updates.
@@ -600,7 +594,6 @@ async function runObjectTween(object: mod.Object, props: ObjectTweenProps, optio
 
     if (duration <= 0) {
         applyObjectTweens(vectors, 1);
-        if (props.enabled === false) mod.EnableSpatialObject(object as mod.SpatialObject, false);
         return;
     }
 
@@ -618,16 +611,11 @@ async function runObjectTween(object: mod.Object, props: ObjectTweenProps, optio
 
     if (!shouldStop()) {
         applyObjectTweens(vectors, 1);
-        if (props.enabled === false) mod.EnableSpatialObject(object as mod.SpatialObject, false);
     }
 }
 
 // Runs tweens for multiple mod.Objects on the same timeline.
 async function runManyObjectTweens(items: ObjectTimelineItem[], options: ObjectTweenOptions | undefined, shouldStop: () => boolean): Promise<void> {
-    for (const item of items) {
-        if (item.props.enabled === true) mod.EnableSpatialObject(item.target as mod.SpatialObject, true);
-    }
-
     // Playback duration in seconds.
     const duration = options?.duration ?? objectDefaultTweenOptions.duration;
     // Time interval between value updates.
@@ -640,7 +628,6 @@ async function runManyObjectTweens(items: ObjectTimelineItem[], options: ObjectT
     if (duration <= 0) {
         for (const entry of built) {
             applyObjectTweens(entry.vectors, 1);
-            if (entry.item.props.enabled === false) mod.EnableSpatialObject(entry.item.target as mod.SpatialObject, false);
         }
         return;
     }
@@ -666,7 +653,6 @@ async function runManyObjectTweens(items: ObjectTimelineItem[], options: ObjectT
     if (!shouldStop()) {
         for (const entry of built) {
             applyObjectTweens(entry.vectors, 1);
-            if (entry.item.props.enabled === false) mod.EnableSpatialObject(entry.item.target as mod.SpatialObject, false);
         }
     }
 }
