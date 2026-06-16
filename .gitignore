@@ -3,6 +3,7 @@ code/*
 dist/*
 test-support/*
 sdk
+codex-knowledge/*
 
 !.gitkeep
 !Strings.json
