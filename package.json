@@ -4,9 +4,9 @@
   "type": "module",
   "description": "Battlefield6 Sample Template : Rule Editor Script",
   "scripts": {
-    "lint": "npx eslint",
-    "lint:fix": "npx eslint --fix",
-    "build": "node ./mergeScript.js",
+    "lint": "bunx eslint",
+    "lint:fix": "bunx eslint --fix",
+    "build": "bunx node ./mergeScript.js",
     "test": "vitest"
   },
   "devDependencies": {
