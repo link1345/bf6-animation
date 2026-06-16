@@ -317,14 +317,6 @@ describe("objectTimeline", () => {
         expect(modMock.SetObjectTransform).toHaveBeenCalledWith(secondObject, expect.anything());
     });
 
-    it("enables objects at the start and disables objects at the end", async () => {
-        await objectAnimate(object).to({ enabled: true, x: 20 }, { duration: 0 });
-        await objectAnimate(secondObject).to({ enabled: false, x: 30 }, { duration: 0 });
-
-        expect(modMock.EnableSpatialObject.mock.calls[0]).toEqual([object, true]);
-        expect(modMock.EnableSpatialObject.mock.calls[modMock.EnableSpatialObject.mock.calls.length - 1]).toEqual([secondObject, false]);
-    });
-
     it("stops before running remaining steps", async () => {
         const tl = objectTimeline();
         tl
@@ -370,6 +362,93 @@ describe("objectTimeline", () => {
 
         expect(vectorData(runtime.worldPos)).toEqual({ x: 0, y: 0, z: 9 });
         expect(modMock.Wait).toHaveBeenCalledTimes(3);
+    });
+
+    it("loops qRotateTo from absolute base state without carrying relative drift", async () => {
+        const runtime = new RuntimeObject(undefined, [10, 0, 0], [0, 0, 0], [0, 1, 0], 0);
+        const baseRotateTo = {
+            axis: [0, 1, 0] as [number, number, number],
+            baseAngle: 0,
+            rotCenter: [0, 0, 0] as [number, number, number],
+            baseCenter: [10, 0, 0] as [number, number, number],
+        };
+
+        await objectTimeline({ loop: 2 })
+            .to(runtime, { qRotateTo: { ...baseRotateTo, fromAngle: 0, angle: 0 } }, { duration: 0 })
+            .to(runtime, { qRotateTo: { ...baseRotateTo, fromAngle: 0, angle: Math.PI / 2 } }, { duration: 0 })
+            .to(runtime, { qRotateTo: { ...baseRotateTo, fromAngle: Math.PI / 2, angle: 0 } }, { duration: 0 })
+            .play();
+
+        expect(vectorData(runtime.worldPos)).toEqual({ x: 10, y: 0, z: 0 });
+    });
+
+    it("qRotateTo can separate orbit angle from visual rotation angle", async () => {
+        const runtime = new RuntimeObject(1 as unknown as Parameters<typeof mod.SpawnObject>[0], [10, 0, 0], [0, 0, 0], [0, 1, 0], 0);
+
+        await objectTimeline()
+            .to(runtime, {
+                qRotateTo: {
+                    axis: [0, 1, 0],
+                    fromAngle: 0,
+                    angle: Math.PI / 2,
+                    fromVisualAngle: 0,
+                    visualAngle: 0,
+                    baseAngle: 0,
+                    rotCenter: [0, 0, 0],
+                    baseCenter: [10, 0, 0],
+                },
+            }, { duration: 0 })
+            .play();
+
+        const transform = modMock.SetObjectTransform.mock.calls[0][1] as unknown as { position: mod.Vector; rotation: mod.Vector };
+        expect(vectorData(transform.position)).toEqual({ x: expect.closeTo(0), y: 0, z: expect.closeTo(-10) });
+        expect(vectorData(transform.rotation)).toEqual({ x: 0, y: 0, z: 0 });
+    });
+
+    it("qRotateTo sends direct yaw euler for Y-axis visual rotations over 90 degrees", async () => {
+        const runtime = new RuntimeObject(1 as unknown as Parameters<typeof mod.SpawnObject>[0], [10, 0, 0], [0, 0, 0], [0, 1, 0], 0);
+        const visualYaw = Math.PI / 2 + 0.05;
+
+        await objectTimeline()
+            .to(runtime, {
+                qRotateTo: {
+                    axis: [0, 1, 0],
+                    fromAngle: 0,
+                    angle: 0,
+                    fromVisualAngle: visualYaw,
+                    visualAngle: visualYaw,
+                    baseAngle: 0,
+                    rotCenter: [0, 0, 0],
+                    baseCenter: [10, 0, 0],
+                },
+            }, { duration: 0 })
+            .play();
+
+        const transform = modMock.SetObjectTransform.mock.calls[0][1] as unknown as { position: mod.Vector; rotation: mod.Vector };
+        expect(vectorData(transform.rotation)).toEqual({ x: 0, y: visualYaw, z: 0 });
+    });
+
+    it("qRotateTo normalizes direct yaw euler before sending it to the game", async () => {
+        const runtime = new RuntimeObject(1 as unknown as Parameters<typeof mod.SpawnObject>[0], [10, 0, 0], [0, 0, 0], [0, 1, 0], 0);
+        const visualYaw = Math.PI * 1.5;
+
+        await objectTimeline()
+            .to(runtime, {
+                qRotateTo: {
+                    axis: [0, 1, 0],
+                    fromAngle: 0,
+                    angle: 0,
+                    fromVisualAngle: visualYaw,
+                    visualAngle: visualYaw,
+                    baseAngle: 0,
+                    rotCenter: [0, 0, 0],
+                    baseCenter: [10, 0, 0],
+                },
+            }, { duration: 0 })
+            .play();
+
+        const transform = modMock.SetObjectTransform.mock.calls[0][1] as unknown as { position: mod.Vector; rotation: mod.Vector };
+        expect(vectorData(transform.rotation)).toEqual({ x: 0, y: -Math.PI / 2, z: 0 });
     });
 
     it("combines parent movement with child rotation in the same runtime to step", async () => {

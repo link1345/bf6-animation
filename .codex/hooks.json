@@ -1,0 +1,39 @@
+{
+  "description": "BF6 Portal project hooks for MCP-first guidance, PortalLog checks, and local knowledge accumulation.",
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bun \"scripts/codex-hooks/session-start.mjs\"",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bun \"scripts/codex-hooks/user-prompt-submit.mjs\"",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bun \"scripts/codex-hooks/stop.mjs\"",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  }
+}
