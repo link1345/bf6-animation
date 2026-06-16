@@ -1,5 +1,6 @@
 import { GravityWorld, objectGravityBody, runtimeObjectGravityBody, uiGravityBody } from "./bf6-gravity";
 import { RuntimeObject, RuntimeObjectPrefab, objectTimeline } from "./bf6-object-animation";
+import { type VectorLike } from "./bf6-easings";
 import { uiTimeline, type TweenProps, type UITimelineItem } from "./bf6-ui-animation";
 
 // Prefab type used by the object sample functions.
@@ -61,6 +62,17 @@ function sampleObjectPointArray(eventPlayer: mod.Player, right: number, up: numb
     // Vector position before tuple conversion.
     const point = sampleObjectPoint(eventPlayer, right, up, forward);
     return [mod.XComponentOf(point), mod.YComponentOf(point), mod.ZComponentOf(point)];
+}
+
+// Formats a VectorLike value for compact Portal logs.
+function sampleVectorLog(value: VectorLike): string {
+    const point: mod.Vector = Array.isArray(value) ? v(value[0], value[1], value.length > 2 ? value[2] : 0) : value as mod.Vector;
+    return `${mod.XComponentOf(point)},${mod.YComponentOf(point)},${mod.ZComponentOf(point)}`;
+}
+
+// Raises a tuple point so debug markers remain visible above flat objects.
+function sampleRaisePoint(value: [number, number, number], up: number): [number, number, number] {
+    return [value[0], value[1] + up, value[2]];
 }
 
 // Deletes a UI widget by name when it exists.
@@ -211,33 +223,99 @@ export async function sampleRuntimeObjectHingedBoards(eventPlayer: mod.Player, p
         return;
     }
 
-    // The first board's left-center point. This is the rotation axis for the second board.
-    const hinge = sampleObjectPointArray(eventPlayer, -1.8, 1, 3.2);
-    // World-space centers for two boards laid out left-to-right in front of the player.
-    const firstCenter = sampleObjectPointArray(eventPlayer, -1.0, 1, 3.2);
-    const secondCenter = sampleObjectPointArray(eventPlayer, 0.65 * 2, 1, 3.2);
+    // WARNING: This hinge sample is calibrated for scale 1 only.
+    // BF6 does not expose the prefab's mesh dimensions or visual pivot here, so non-1 scale can make the visual board drift from the calculated hinge/origin path.
+    const boardScale = 1;
+    const baseHingeRight = -1.8;
+    const baseBoardOriginGapRight = 1.3;
+    const boardUp = 1;
+    const boardForward = 3.2;
+    const boardScaleVector: [number, number, number] = [boardScale, boardScale, boardScale];
+    const boardOriginSpan = baseBoardOriginGapRight * boardScale;
+    const boardMeshOriginOffset: [number, number, number] = [boardOriginSpan, 0, 0];
+    const firstOriginRight = baseHingeRight - boardOriginSpan;
+    const secondOriginRight = baseHingeRight - boardOriginSpan * 2;
+    const boardRotationAxis: [number, number, number] = [0, 1, 0];
+    const boardVisualYawOffset = Math.PI / 2;
+    const facing = mod.GetSoldierState(eventPlayer, mod.SoldierStateVector.GetFacingDirection);
+    const facingX = mod.XComponentOf(facing);
+    const facingZ = mod.ZComponentOf(facing);
+    const facingLength = Math.sqrt(facingX * facingX + facingZ * facingZ);
+    const boardYaw = facingLength > 0.001 ? Math.atan2(facingX / facingLength, facingZ / facingLength) : 0;
 
-    // First board starts at the hinge side and rotates around its own left-center.
-    const firstBoard = new RuntimeObject(prefab, firstCenter, [0, 0, 0], [0, 1, 0], 0, [2, 2, 2]);
-    // Second board starts to the right of the first board, then swings around the first board's left-center.
-    const secondBoard = new RuntimeObject(prefab, secondCenter, [0, 0, 0], [0, 1, 0], 0, [2, 2, 2]);
+    // FloorPlate appears to use a right-side corner/edge origin, so place origins at each board's right edge.
+    const hinge = sampleObjectPointArray(eventPlayer, baseHingeRight, boardUp, boardForward);
+    const firstOrigin = sampleObjectPointArray(eventPlayer, firstOriginRight, boardUp, boardForward);
+    const secondOrigin = sampleObjectPointArray(eventPlayer, secondOriginRight, boardUp, boardForward);
+    const closedAngle = 0;
+    const openAngle = Math.PI / 2;
+    const visualClosedAngle = boardYaw + boardVisualYawOffset;
+    const visualOpenAngle = boardYaw + boardVisualYawOffset + openAngle;
+    const markerVisualClosedAngle = visualClosedAngle - Math.PI / 2;
+    const markerVisualOpenAngle = visualOpenAngle - Math.PI / 2;
+    const firstRotateToBase = { axis: boardRotationAxis, baseAngle: closedAngle, rotCenter: hinge, baseCenter: firstOrigin };
+    const secondRotateToBase = { axis: boardRotationAxis, baseAngle: closedAngle, rotCenter: hinge, baseCenter: secondOrigin };
+    const markerUp = 1.35;
+    const markerHinge = sampleRaisePoint(hinge, markerUp);
+    const markerFirstOrigin = sampleRaisePoint(firstOrigin, markerUp);
+    const markerSecondOrigin = sampleRaisePoint(secondOrigin, markerUp);
+    const firstMarkerRotateToBase = { axis: boardRotationAxis, baseAngle: closedAngle, rotCenter: markerHinge, baseCenter: markerFirstOrigin };
+    const secondMarkerRotateToBase = { axis: boardRotationAxis, baseAngle: closedAngle, rotCenter: markerHinge, baseCenter: markerSecondOrigin };
 
-    // Timeline rotates both boards around the same hinge point.
+    console.log(
+        "LOG> hinged-layout",
+        "yaw", boardYaw,
+        "hinge", sampleVectorLog(hinge),
+        "firstOrigin", sampleVectorLog(firstOrigin),
+        "secondOrigin", sampleVectorLog(secondOrigin),
+        "span", boardOriginSpan,
+        "meshOffset", sampleVectorLog(boardMeshOriginOffset),
+        "visualOffset", boardVisualYawOffset,
+        "visualClosed", visualClosedAngle,
+        "visualOpen", visualOpenAngle,
+        "markerVisualClosed", markerVisualClosedAngle,
+        "markerVisualOpen", markerVisualOpenAngle,
+        "markerHinge", sampleVectorLog(markerHinge),
+        "markerFirst", sampleVectorLog(markerFirstOrigin),
+        "markerSecond", sampleVectorLog(markerSecondOrigin),
+    );
+
+    const firstBoard = new RuntimeObject(prefab, firstOrigin, boardMeshOriginOffset, boardRotationAxis, visualClosedAngle, boardScaleVector);
+    const secondBoard = new RuntimeObject(prefab, secondOrigin, boardMeshOriginOffset, boardRotationAxis, visualClosedAngle, boardScaleVector);
+    const markerPrefab = mod.RuntimeSpawn_Common.FiringRange_Target_01;
+    const hingeMarker = new RuntimeObject(markerPrefab, markerHinge, [0, 0, 0], boardRotationAxis, markerVisualClosedAngle, [0.2, 0.2, 0.2]);
+    const firstOriginMarker = new RuntimeObject(markerPrefab, markerFirstOrigin, [0, 0, 0], boardRotationAxis, markerVisualClosedAngle, [0.25, 0.25, 0.25]);
+    const secondOriginMarker = new RuntimeObject(markerPrefab, markerSecondOrigin, [0, 0, 0], boardRotationAxis, markerVisualClosedAngle, [0.3, 0.3, 0.3]);
+
+    // Timeline uses absolute target states so looped playback does not accumulate relative rotation drift.
     const timeline = objectTimeline({ loop: true })
+        .to([
+            { target: firstBoard, props: { qRotateTo: { ...firstRotateToBase, fromAngle: closedAngle, angle: closedAngle, fromVisualAngle: visualClosedAngle, visualAngle: visualClosedAngle, debugName: "hinge-first-close" } } },
+            { target: secondBoard, props: { qRotateTo: { ...secondRotateToBase, fromAngle: closedAngle, angle: closedAngle, fromVisualAngle: visualClosedAngle, visualAngle: visualClosedAngle, debugName: "hinge-second-close" } } },
+            { target: firstOriginMarker, props: { qRotateTo: { ...firstMarkerRotateToBase, fromAngle: closedAngle, angle: closedAngle, fromVisualAngle: markerVisualClosedAngle, visualAngle: markerVisualClosedAngle, debugName: "marker-first-close" } } },
+            { target: secondOriginMarker, props: { qRotateTo: { ...secondMarkerRotateToBase, fromAngle: closedAngle, angle: closedAngle, fromVisualAngle: markerVisualClosedAngle, visualAngle: markerVisualClosedAngle, debugName: "marker-second-close" } } },
+        ], { duration: 0 })
         .wait(4)
         .to([
-            { target: firstBoard, props: { qRotateBy: { axis: [0, 1, 0], angle: Math.PI / 2, rotCenter: hinge } } },
-            { target: secondBoard, props: { qRotateBy: { axis: [0, 1, 0], angle: Math.PI / 2, rotCenter: hinge } } },
+            { target: firstBoard, props: { qRotateTo: { ...firstRotateToBase, fromAngle: closedAngle, angle: openAngle, fromVisualAngle: visualClosedAngle, visualAngle: visualOpenAngle, debugName: "hinge-first-open" } } },
+            { target: secondBoard, props: { qRotateTo: { ...secondRotateToBase, fromAngle: closedAngle, angle: openAngle, fromVisualAngle: visualClosedAngle, visualAngle: visualOpenAngle, debugName: "hinge-second-open" } } },
+            { target: firstOriginMarker, props: { qRotateTo: { ...firstMarkerRotateToBase, fromAngle: closedAngle, angle: openAngle, fromVisualAngle: markerVisualClosedAngle, visualAngle: markerVisualOpenAngle, debugName: "marker-first-open" } } },
+            { target: secondOriginMarker, props: { qRotateTo: { ...secondMarkerRotateToBase, fromAngle: closedAngle, angle: openAngle, fromVisualAngle: markerVisualClosedAngle, visualAngle: markerVisualOpenAngle, debugName: "marker-second-open" } } },
         ], { duration: 1.2, ease: "inOutCubic", step: 1 / 20 })
         .wait(6)
         .to([
-            { target: firstBoard, props: { qRotateBy: { axis: [0, 1, 0], angle: -Math.PI / 2, rotCenter: hinge } } },
-            { target: secondBoard, props: { qRotateBy: { axis: [0, 1, 0], angle: -Math.PI / 2, rotCenter: hinge } } },
+            { target: firstBoard, props: { qRotateTo: { ...firstRotateToBase, fromAngle: openAngle, angle: closedAngle, fromVisualAngle: visualOpenAngle, visualAngle: visualClosedAngle, debugName: "hinge-first-return" } } },
+            { target: secondBoard, props: { qRotateTo: { ...secondRotateToBase, fromAngle: openAngle, angle: closedAngle, fromVisualAngle: visualOpenAngle, visualAngle: visualClosedAngle, debugName: "hinge-second-return" } } },
+            { target: firstOriginMarker, props: { qRotateTo: { ...firstMarkerRotateToBase, fromAngle: openAngle, angle: closedAngle, fromVisualAngle: markerVisualOpenAngle, visualAngle: markerVisualClosedAngle, debugName: "marker-first-return" } } },
+            { target: secondOriginMarker, props: { qRotateTo: { ...secondMarkerRotateToBase, fromAngle: openAngle, angle: closedAngle, fromVisualAngle: markerVisualOpenAngle, visualAngle: markerVisualClosedAngle, debugName: "marker-second-return" } } },
         ], { duration: 1.0, ease: "inOutCubic", step: 1 / 20 });
     control?.onCancel(() => {
         timeline.stop();
         firstBoard.Remove();
         secondBoard.Remove();
+        hingeMarker.Remove();
+        firstOriginMarker.Remove();
+        secondOriginMarker.Remove();
     });
     await timeline.play();
 }

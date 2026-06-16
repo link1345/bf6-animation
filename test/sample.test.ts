@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { OngoingPlayer, OnPlayerDeployed, OnPlayerDied, OnPlayerJoinGame, OnPlayerUIButtonEvent, OnPlayerUndeploy } from "../mods/Script";
-import { sampleObjectFloatPhysics, sampleRuntimeObjectHingedBoards, sampleUiGaugeAnimation } from "../mods/Samples";
+import { sampleObjectFloatPhysics, sampleRuntimeObjectHingedBoards, sampleUiGaugeAnimation, type SampleAnimationControl } from "../mods/Samples";
 import { createFake, setupBfPortalMock, type BfPortalModMock } from "../test-support/bfportal-vitest-mock.generated";
 
 import stringkeys from "../dist/Strings.json";
@@ -72,6 +72,26 @@ function normalizeVector(value: mod.Vector): mod.Vector {
     const data = vectorData(value);
     const length = Math.sqrt(data.x ** 2 + data.y ** 2 + data.z ** 2);
     return vector(data.x / length, data.y / length, data.z / length);
+}
+
+function stopHingedBoardSampleAfterFirstRuntimeTick(): SampleAnimationControl {
+    let stopSample: (() => void) | undefined;
+    let canceled = false;
+    let waitCount = 0;
+    modMock.Wait.mockImplementation(async () => {
+        waitCount += 1;
+        if (waitCount === 2) {
+            canceled = true;
+            stopSample?.();
+        }
+    });
+
+    return {
+        isCanceled: () => canceled,
+        onCancel: (stop) => {
+            stopSample = stop;
+        },
+    };
 }
 
 beforeEach(() => {
@@ -202,6 +222,7 @@ beforeEach(() => {
         } as typeof mod.Weapons,
         RuntimeSpawn_Common: {
             Crate_01_A: 60,
+            FiringRange_Target_01: 61,
         } as typeof mod.RuntimeSpawn_Common,
         RuntimeSpawn_Limestone: {
             Books_01_A: 70,
@@ -560,25 +581,49 @@ describe("direct UI sample functions", () => {
     });
 
     it("sampleRuntimeObjectHingedBoards spawns two boards and rotates both around the hinge", async () => {
-        await sampleRuntimeObjectHingedBoards(createFake<mod.Player>(), mod.RuntimeSpawn_Common.Crate_01_A);
+        await sampleRuntimeObjectHingedBoards(createFake<mod.Player>(), mod.RuntimeSpawn_Common.Crate_01_A, stopHingedBoardSampleAfterFirstRuntimeTick());
 
-        expect(modMock.SpawnObject).toHaveBeenCalledTimes(2);
+        expect(modMock.SpawnObject).toHaveBeenCalledTimes(5);
         expect(modMock.SpawnObject).toHaveBeenNthCalledWith(
             1,
             mod.RuntimeSpawn_Common.Crate_01_A,
-            { x: 9, y: 3.35, z: 23.2 },
-            { x: 0, y: 0, z: 0 },
-            { x: 1, y: 1, z: 1 },
+            { x: expect.closeTo(5.6), y: 3, z: expect.closeTo(20.6) },
+            { x: 0, y: Math.PI / 2, z: 0 },
+            { x: 2, y: 2, z: 2 },
         );
         expect(modMock.SpawnObject).toHaveBeenNthCalledWith(
             2,
             mod.RuntimeSpawn_Common.Crate_01_A,
-            { x: 10.65, y: 3.35, z: 23.2 },
-            { x: 0, y: 0, z: 0 },
-            { x: 1, y: 1, z: 1 },
+            { x: expect.closeTo(3), y: 3, z: expect.closeTo(20.6) },
+            { x: 0, y: Math.PI / 2, z: 0 },
+            { x: 2, y: 2, z: 2 },
         );
         expect(modMock.SetObjectTransform).toHaveBeenCalled();
         expect(modMock.SetObjectTransform.mock.calls.map((call) => call[0])).toContain(modMock.SpawnObject.mock.results[0].value);
         expect(modMock.SetObjectTransform.mock.calls.map((call) => call[0])).toContain(modMock.SpawnObject.mock.results[1].value);
+    });
+
+    it("sampleRuntimeObjectHingedBoards aligns visual yaw with player-relative layout", async () => {
+        modMock.GetSoldierState.mockImplementation(((_player: mod.Player, soldierState: mod.SoldierStateVector | mod.SoldierStateBool) => {
+            if (soldierState === mod.SoldierStateBool.IsCrouching) return soldierIsCrouching;
+            return soldierState === mod.SoldierStateVector.GetFacingDirection ? vector(1, 0, 0) : vector(10, 2, 20);
+        }) as typeof mod.GetSoldierState);
+
+        await sampleRuntimeObjectHingedBoards(createFake<mod.Player>(), mod.RuntimeSpawn_Common.Crate_01_A, stopHingedBoardSampleAfterFirstRuntimeTick());
+
+        expect(modMock.SpawnObject).toHaveBeenNthCalledWith(
+            1,
+            mod.RuntimeSpawn_Common.Crate_01_A,
+            { x: expect.closeTo(10.6), y: 3, z: expect.closeTo(24.4) },
+            { x: 0, y: Math.PI, z: 0 },
+            { x: 2, y: 2, z: 2 },
+        );
+        expect(modMock.SpawnObject).toHaveBeenNthCalledWith(
+            2,
+            mod.RuntimeSpawn_Common.Crate_01_A,
+            { x: expect.closeTo(10.6), y: 3, z: expect.closeTo(27) },
+            { x: 0, y: Math.PI, z: 0 },
+            { x: 2, y: 2, z: 2 },
+        );
     });
 });
