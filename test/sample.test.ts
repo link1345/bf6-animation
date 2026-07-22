@@ -1,11 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { OnPlayerDeployed, OnPlayerJoinGame, OnPlayerUIButtonEvent, OnPlayerUndeploy } from "../mods/Script";
-import { sampleObjectFloatPhysics, sampleUiGaugeAnimation } from "../mods/Samples";
+import { OngoingPlayer, OnPlayerDeployed, OnPlayerDied, OnPlayerJoinGame, OnPlayerUIButtonEvent, OnPlayerUndeploy } from "../mods/Script";
+import { sampleObjectFloatPhysics, sampleRuntimeObjectHingedBoards, sampleUiGaugeAnimation, type SampleAnimationControl } from "../mods/Samples";
 import { createFake, setupBfPortalMock, type BfPortalModMock } from "../test-support/bfportal-vitest-mock.generated";
 
 import stringkeys from "../dist/Strings.json";
 
 export let modMock: BfPortalModMock;
+let soldierIsCrouching: boolean;
 
 type TestVector = { x: number; y: number; z: number };
 type TestWidget = { __test: true; name: string };
@@ -41,14 +42,73 @@ function vectorData(value: mod.Vector): TestVector {
     return value as unknown as TestVector;
 }
 
+function addValue(left: number, right: number): number;
+function addValue(left: mod.Vector, right: mod.Vector): mod.Vector;
+function addValue(left: number | mod.Vector, right: number | mod.Vector): number | mod.Vector {
+    if (typeof left === "number" && typeof right === "number") return left + right;
+
+    const leftData = vectorData(left as mod.Vector);
+    const rightData = vectorData(right as mod.Vector);
+    return vector(leftData.x + rightData.x, leftData.y + rightData.y, leftData.z + rightData.z);
+}
+
+function subtractValue(left: number, right: number): number;
+function subtractValue(left: mod.Vector, right: mod.Vector): mod.Vector;
+function subtractValue(left: number | mod.Vector, right: number | mod.Vector): number | mod.Vector {
+    if (typeof left === "number" && typeof right === "number") return left - right;
+
+    const leftData = vectorData(left as mod.Vector);
+    const rightData = vectorData(right as mod.Vector);
+    return vector(leftData.x - rightData.x, leftData.y - rightData.y, leftData.z - rightData.z);
+}
+
+function dotVector(left: mod.Vector, right: mod.Vector): number {
+    const leftData = vectorData(left);
+    const rightData = vectorData(right);
+    return leftData.x * rightData.x + leftData.y * rightData.y + leftData.z * rightData.z;
+}
+
+function normalizeVector(value: mod.Vector): mod.Vector {
+    const data = vectorData(value);
+    const length = Math.sqrt(data.x ** 2 + data.y ** 2 + data.z ** 2);
+    return vector(data.x / length, data.y / length, data.z / length);
+}
+
+function stopHingedBoardSampleAfterFirstRuntimeTick(): SampleAnimationControl {
+    let stopSample: (() => void) | undefined;
+    let canceled = false;
+    let waitCount = 0;
+    modMock.Wait.mockImplementation(async () => {
+        waitCount += 1;
+        if (waitCount === 2) {
+            canceled = true;
+            stopSample?.();
+        }
+    });
+
+    return {
+        isCanceled: () => canceled,
+        onCancel: (stop) => {
+            stopSample = stop;
+        },
+    };
+}
+
 beforeEach(() => {
     vi.resetAllMocks();
     widgets.clear();
+    soldierIsCrouching = false;
 
     modMock = setupBfPortalMock({
         GetObjId: () => 100,
         Wait: async () => undefined,
         SpawnObject: () => fakeObject("sample-object"),
+        Add: addValue,
+        DotProduct: dotVector,
+        Normalize: normalizeVector,
+        SendErrorReport: () => undefined,
+        Subtract: subtractValue,
+        UnspawnObject: () => undefined,
         CreateTransform: (position: mod.Vector, rotation: mod.Vector) => ({ position, rotation }) as unknown as mod.Transform,
         GetObjectPosition: () => vector(10, 3, 23),
         GetObjectRotation: () => vector(0, 0, 0),
@@ -87,7 +147,10 @@ beforeEach(() => {
         GetUIButtonColorPressed: () => vector(0.4, 0.4, 0.4),
         GetUIButtonColorHover: () => vector(0.5, 0.5, 0.5),
         GetUIButtonColorFocused: () => vector(0.6, 0.6, 0.6),
-        GetSoldierState: ((_player: mod.Player, soldierState: mod.SoldierStateVector) => soldierState === mod.SoldierStateVector.GetFacingDirection ? vector(0, 0, 1) : vector(10, 2, 20)) as typeof mod.GetSoldierState,
+        GetSoldierState: ((_player: mod.Player, soldierState: mod.SoldierStateVector | mod.SoldierStateBool) => {
+            if (soldierState === mod.SoldierStateBool.IsCrouching) return soldierIsCrouching;
+            return soldierState === mod.SoldierStateVector.GetFacingDirection ? vector(0, 0, 1) : vector(10, 2, 20);
+        }) as typeof mod.GetSoldierState,
         Message(
             msg: string | number | mod.Player,
             msgArg0?: string | number | mod.Player,
@@ -143,12 +206,28 @@ beforeEach(() => {
             GetLinearVelocity: 2,
             GetPosition: 3,
         } as typeof mod.SoldierStateVector,
+        SoldierStateBool: {
+            IsCrouching: 4,
+        } as typeof mod.SoldierStateBool,
+        RestrictedInputs: {
+            MoveForwardBack: 0,
+            MoveLeftRight: 1,
+            Jump: 2,
+            Prone: 3,
+            FireWeapon: 4,
+            Reload: 5,
+        } as typeof mod.RestrictedInputs,
         Weapons: {
             AssaultRifle_M433: 4,
         } as typeof mod.Weapons,
         RuntimeSpawn_Common: {
             Crate_01_A: 60,
+            FiringRange_Target_01: 61,
         } as typeof mod.RuntimeSpawn_Common,
+        RuntimeSpawn_Limestone: {
+            Books_01_A: 70,
+            FloorPlate_01_128: 71,
+        } as typeof mod.RuntimeSpawn_Limestone,
     });
 
     void OnPlayerJoinGame(createFake<mod.Player>());
@@ -178,11 +257,13 @@ describe("sample menu", () => {
             0,
             expect.anything(),
         );
-        expect(modMock.AddUIButton).toHaveBeenCalledTimes(11);
+        expect(modMock.AddUIButton).toHaveBeenCalledTimes(13);
         expect(modMock.EnableUIInputMode).toHaveBeenCalledWith(true, expect.anything());
+        expect(modMock.EnableInputRestriction).toHaveBeenCalledTimes(6);
+        expect(modMock.EnableInputRestriction.mock.calls.every((call) => call[2] === true)).toBe(true);
         expect(modMock.EnableUIButtonEvent).toHaveBeenCalledWith(widgetNamed("sample-menu-100-button-ui-gauge"), 0, true);
         expect(modMock.EnableUIButtonEvent).toHaveBeenCalledWith(widgetNamed("sample-menu-100-button-ui-gauge"), 1, true);
-        expect(modMock.EnableUIButtonEvent).toHaveBeenCalledTimes(22);
+        expect(modMock.EnableUIButtonEvent).toHaveBeenCalledTimes(26);
         expect(modMock.AddUIText).toHaveBeenCalledWith(
             "sample-menu-100-button-ui-gauge-label",
             { x: 188, y: 72, z: 0 },
@@ -199,6 +280,50 @@ describe("sample menu", () => {
             { x: 1, y: 1, z: 1 },
             1,
             3,
+            0,
+            expect.anything(),
+        );
+        expect(modMock.AddUIText).toHaveBeenCalledWith(
+            "sample-menu-100-guide",
+            { x: 188, y: 294, z: 0 },
+            { x: 158, y: 30, z: 0 },
+            7,
+            widgetNamed("sample-menu-100-root"),
+            true,
+            0,
+            { x: 0, y: 0, z: 0 },
+            0,
+            5,
+            expect.objectContaining({ msg: stringkeys.sample_menu_move_button_hint }),
+            11,
+            { x: 1, y: 1, z: 1 },
+            1,
+            3,
+            0,
+            expect.anything(),
+        );
+        expect(modMock.AddUIButton).toHaveBeenCalledWith(
+            "sample-menu-100-button-move-mode",
+            { x: 16, y: 292, z: 0 },
+            { x: 158, y: 30, z: 0 },
+            7,
+            widgetNamed("sample-menu-100-root"),
+            true,
+            0,
+            { x: 0.05, y: 0.08, z: 0.05 },
+            0.5,
+            8,
+            true,
+            { x: 0.22, y: 0.58, z: 0.22 },
+            0.92,
+            { x: 0.08, y: 0.08, z: 0.08 },
+            0.35,
+            { x: 0.18, y: 0.85, z: 0.35 },
+            1,
+            { x: 0.16, y: 0.75, z: 0.25 },
+            1,
+            { x: 0.7, y: 1, z: 0.55 },
+            1,
             0,
             expect.anything(),
         );
@@ -230,6 +355,72 @@ describe("sample menu", () => {
             0,
             expect.anything(),
         );
+    });
+
+    it("enters movement mode from the move UI button and returns to menu mode from crouch", async () => {
+        let now = 1000;
+        vi.spyOn(Date, "now").mockImplementation(() => now);
+        await OnPlayerDeployed(createFake<mod.Player>());
+        modMock.EnableUIInputMode.mockClear();
+        modMock.EnableInputRestriction.mockClear();
+
+        await OnPlayerUIButtonEvent(
+            createFake<mod.Player>(),
+            widgetNamed("sample-menu-100-button-move-mode"),
+            mod.UIButtonEvent.ButtonUp,
+        );
+
+        expect(modMock.EnableUIInputMode).toHaveBeenLastCalledWith(false, expect.anything());
+        expect(modMock.EnableInputRestriction).toHaveBeenCalledTimes(6);
+        expect(modMock.EnableInputRestriction.mock.calls.every((call) => call[2] === false)).toBe(true);
+        expect(modMock.SetUITextLabel).toHaveBeenCalledWith(widgetNamed("sample-menu-100-status"), expect.objectContaining({ msg: stringkeys.sample_status_move_mode }));
+
+        modMock.EnableUIInputMode.mockClear();
+        modMock.EnableInputRestriction.mockClear();
+        now = 1400;
+        soldierIsCrouching = true;
+
+        await OngoingPlayer(createFake<mod.Player>());
+
+        expect(modMock.EnableUIInputMode).toHaveBeenLastCalledWith(true, expect.anything());
+        expect(modMock.EnableInputRestriction).toHaveBeenCalledTimes(6);
+        expect(modMock.EnableInputRestriction.mock.calls.every((call) => call[2] === true)).toBe(true);
+        expect(modMock.SetUITextLabel).toHaveBeenCalledWith(widgetNamed("sample-menu-100-status"), expect.objectContaining({ msg: stringkeys.sample_menu_status_idle }));
+    });
+
+    it("maintains player mode from OngoingPlayer at an interval and stops after death", async () => {
+        let now = 1000;
+        vi.spyOn(Date, "now").mockImplementation(() => now);
+
+        await OnPlayerDeployed(createFake<mod.Player>());
+        modMock.EnableUIInputMode.mockClear();
+        modMock.EnableInputRestriction.mockClear();
+
+        await OngoingPlayer(createFake<mod.Player>());
+
+        expect(modMock.EnableUIInputMode).toHaveBeenLastCalledWith(true, expect.anything());
+        expect(modMock.EnableInputRestriction).toHaveBeenCalledTimes(6);
+
+        modMock.EnableUIInputMode.mockClear();
+        modMock.EnableInputRestriction.mockClear();
+        now = 1100;
+
+        await OngoingPlayer(createFake<mod.Player>());
+
+        expect(modMock.EnableUIInputMode).not.toHaveBeenCalled();
+        expect(modMock.EnableInputRestriction).not.toHaveBeenCalled();
+
+        await OnPlayerDied(
+            createFake<mod.Player>(),
+            createFake<mod.Player>(),
+            { __test: true } as unknown as mod.DeathType,
+            { __test: true } as unknown as mod.WeaponUnlock,
+        );
+        now = 1400;
+        await OngoingPlayer(createFake<mod.Player>());
+
+        expect(modMock.EnableUIInputMode).not.toHaveBeenCalled();
+        expect(modMock.EnableInputRestriction).not.toHaveBeenCalled();
     });
 
     it("does not run a sample just by deploying", async () => {
@@ -332,7 +523,7 @@ describe("sample menu", () => {
         );
 
         expect(modMock.SpawnObject).toHaveBeenCalledWith(
-            mod.RuntimeSpawn_Common.Crate_01_A,
+            mod.RuntimeSpawn_Limestone.Books_01_A,
             { x: 8.8, y: 3.2, z: 23, },
             { x: 0, y: 0, z: 0 },
             { x: 1.8, y: 1.8, z: 1.8 },
@@ -352,7 +543,7 @@ describe("sample menu", () => {
         );
 
         expect(modMock.SpawnObject).toHaveBeenCalledWith(
-            mod.RuntimeSpawn_Common.Crate_01_A,
+            mod.RuntimeSpawn_Limestone.Books_01_A,
             { x: 10, y: 3.35, z: 22.2 },
             { x: 0, y: 0, z: 0 },
             { x: 2.1, y: 2.1, z: 2.1 },
@@ -392,5 +583,52 @@ describe("direct UI sample functions", () => {
         await sampleObjectFloatPhysics(createFake<mod.Player>(), mod.RuntimeSpawn_Common.Crate_01_A);
 
         expect(modMock.SetObjectTransform).toHaveBeenCalled();
+    });
+
+    it("sampleRuntimeObjectHingedBoards spawns two boards and rotates both around the hinge", async () => {
+        await sampleRuntimeObjectHingedBoards(createFake<mod.Player>(), mod.RuntimeSpawn_Common.Crate_01_A, stopHingedBoardSampleAfterFirstRuntimeTick());
+
+        expect(modMock.SpawnObject).toHaveBeenCalledTimes(5);
+        expect(modMock.SpawnObject).toHaveBeenNthCalledWith(
+            1,
+            mod.RuntimeSpawn_Common.Crate_01_A,
+            { x: expect.closeTo(6.9), y: 3, z: expect.closeTo(21.9) },
+            { x: 0, y: Math.PI / 2, z: 0 },
+            { x: 1, y: 1, z: 1 },
+        );
+        expect(modMock.SpawnObject).toHaveBeenNthCalledWith(
+            2,
+            mod.RuntimeSpawn_Common.Crate_01_A,
+            { x: expect.closeTo(5.6), y: 3, z: expect.closeTo(21.9) },
+            { x: 0, y: Math.PI / 2, z: 0 },
+            { x: 1, y: 1, z: 1 },
+        );
+        expect(modMock.SetObjectTransform).toHaveBeenCalled();
+        expect(modMock.SetObjectTransform.mock.calls.map((call) => call[0])).toContain(modMock.SpawnObject.mock.results[0].value);
+        expect(modMock.SetObjectTransform.mock.calls.map((call) => call[0])).toContain(modMock.SpawnObject.mock.results[1].value);
+    });
+
+    it("sampleRuntimeObjectHingedBoards aligns visual yaw with player-relative layout", async () => {
+        modMock.GetSoldierState.mockImplementation(((_player: mod.Player, soldierState: mod.SoldierStateVector | mod.SoldierStateBool) => {
+            if (soldierState === mod.SoldierStateBool.IsCrouching) return soldierIsCrouching;
+            return soldierState === mod.SoldierStateVector.GetFacingDirection ? vector(1, 0, 0) : vector(10, 2, 20);
+        }) as typeof mod.GetSoldierState);
+
+        await sampleRuntimeObjectHingedBoards(createFake<mod.Player>(), mod.RuntimeSpawn_Common.Crate_01_A, stopHingedBoardSampleAfterFirstRuntimeTick());
+
+        expect(modMock.SpawnObject).toHaveBeenNthCalledWith(
+            1,
+            mod.RuntimeSpawn_Common.Crate_01_A,
+            { x: expect.closeTo(11.9), y: 3, z: expect.closeTo(23.1) },
+            { x: 0, y: Math.PI, z: 0 },
+            { x: 1, y: 1, z: 1 },
+        );
+        expect(modMock.SpawnObject).toHaveBeenNthCalledWith(
+            2,
+            mod.RuntimeSpawn_Common.Crate_01_A,
+            { x: expect.closeTo(11.9), y: 3, z: expect.closeTo(24.4) },
+            { x: 0, y: Math.PI, z: 0 },
+            { x: 1, y: 1, z: 1 },
+        );
     });
 });

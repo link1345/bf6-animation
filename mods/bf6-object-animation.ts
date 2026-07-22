@@ -22,6 +22,27 @@ export interface RuntimeObjectTweenProps {
         // Rotation center; defaults to the target effective position.
         rotCenter?: VectorLike;
     };
+    // Absolute rotation around a center, interpolated from fromAngle to angle.
+    qRotateTo?: {
+        // Rotation axis.
+        axis: VectorLike;
+        // Angle used at progress 0.
+        fromAngle: number;
+        // Angle used at progress 1.
+        angle: number;
+        // Visual rotation angle used at progress 0; defaults to fromAngle.
+        fromVisualAngle?: number;
+        // Visual rotation angle used at progress 1; defaults to angle.
+        visualAngle?: number;
+        // Angle that matches baseCenter.
+        baseAngle?: number;
+        // Rotation center; defaults to the target effective position.
+        rotCenter?: VectorLike;
+        // Center position at baseAngle; defaults to the target's initial position.
+        baseCenter?: VectorLike;
+        // Optional label for transform debugging.
+        debugName?: string;
+    };
 }
 
 // Target and properties for moving RuntimeObjects together in a timeline.
@@ -47,6 +68,8 @@ export class RuntimeObject {
     private runtimeObjectPos: mod.Vector;
     // Committed rotation state.
     private runtimeObjectRotState: RuntimeObjectQuaternion;
+    // Euler rotation to send directly when quaternion-to-Euler conversion would create an unstable equivalent form.
+    private runtimeObjectRotEulerOverride: mod.Vector | undefined;
     // Pending movement delta accumulated before ApplyTransform.
     private runtimeObjectDeltaPos: mod.Vector = mod.CreateVector(0, 0, 0);
     // Pending rotation delta accumulated before ApplyTransform.
@@ -99,7 +122,9 @@ export class RuntimeObject {
         this.prefabEnum = prefabEnum;
         this.runtimeObjectPos = runtimeObjectToVector(pos);
         this.offset = runtimeObjectToVector(offset);
-        this.runtimeObjectRotState = RuntimeObject.runtimeObjectMakeRotQ(runtimeObjectToVector(axis), angle);
+        const rotationAxis = runtimeObjectToVector(axis);
+        this.runtimeObjectRotState = RuntimeObject.runtimeObjectMakeRotQ(rotationAxis, angle);
+        this.runtimeObjectRotEulerOverride = RuntimeObject.runtimeObjectDirectYawEuler(rotationAxis, angle);
         this.runtimeObjectEffPos = this.runtimeObjectPos;
         this.runtimeObjectEffRotState = [...this.runtimeObjectRotState];
 
@@ -107,7 +132,7 @@ export class RuntimeObject {
             this.object = mod.SpawnObject(
                 prefabEnum,
                 mod.Add(this.runtimeObjectPos, RuntimeObject.runtimeObjectQRotateVector(this.offset, this.runtimeObjectRotState)),
-                RuntimeObject.runtimeObjectQToEuler(this.runtimeObjectRotState),
+                this.runtimeObjectRotEulerOverride ?? RuntimeObject.runtimeObjectQToEuler(this.runtimeObjectRotState),
                 runtimeObjectToVector(scale),
             ) as TransformableObject;
             this.id = this.object === undefined ? undefined : mod.GetObjId(this.object);
@@ -143,6 +168,7 @@ export class RuntimeObject {
         // Rotation delta added by this call.
         const deltaRot = RuntimeObject.runtimeObjectMakeRotQ(rotationAxis, angle);
         this.runtimeObjectDeltaRot = RuntimeObject.runtimeObjectQProduct(deltaRot, this.runtimeObjectDeltaRot);
+        this.runtimeObjectRotEulerOverride = undefined;
 
         // Computes positional delta caused by rotation around the center.
         const center = rotCenter === undefined ? this.runtimeObjectEffPos : runtimeObjectToVector(rotCenter);
@@ -159,6 +185,57 @@ export class RuntimeObject {
         }
     }
 
+    // Sets an absolute rotation state around a center from a stable base position.
+    QRotationTo(axis: VectorLike, angle: number, baseAngle = 0, rotCenter?: VectorLike, baseCenter?: VectorLike, visualAngle = angle, debugName?: string, debugProgress?: number): void {
+        let rotationAxis = runtimeObjectToVector(axis);
+        if (this.runtimeObjectParent) rotationAxis = this.runtimeObjectParent.EffLocalToWorldVector(rotationAxis);
+
+        const targetRot = RuntimeObject.runtimeObjectMakeRotQ(rotationAxis, visualAngle);
+        const orbitRot = RuntimeObject.runtimeObjectMakeRotQ(rotationAxis, angle);
+        const baseRot = RuntimeObject.runtimeObjectMakeRotQ(rotationAxis, baseAngle);
+        const deltaFromBase = RuntimeObject.runtimeObjectQProduct(orbitRot, RuntimeObject.runtimeObjectInverseQ(baseRot));
+        const center = rotCenter === undefined ? this.runtimeObjectEffPos : runtimeObjectToVector(rotCenter);
+        const sourceCenter = baseCenter === undefined ? this.runtimeObjectPos : runtimeObjectToVector(baseCenter);
+        const distanceCenter = mod.Subtract(sourceCenter, center);
+
+        const nextPos = mod.Add(center, RuntimeObject.runtimeObjectQRotateVector(distanceCenter, deltaFromBase));
+        this.runtimeObjectPos = nextPos;
+        this.runtimeObjectRotState = targetRot;
+        this.runtimeObjectRotEulerOverride = RuntimeObject.runtimeObjectDirectYawEuler(rotationAxis, visualAngle);
+        this.runtimeObjectDeltaPos = mod.CreateVector(0, 0, 0);
+        this.runtimeObjectDeltaRot = [1, 0, 0, 0];
+        this.runtimeObjectUpdateEff();
+        this.runtimeObjectIsTransform = true;
+
+        const shouldDebug =
+            debugName !== undefined &&
+            (debugProgress === undefined ||
+                debugProgress < 0.001 ||
+                Math.abs(debugProgress - 0.5) < 0.001 ||
+                debugProgress > 0.999);
+        if (shouldDebug) {
+            const debugRot = this.runtimeObjectRotEulerOverride ?? RuntimeObject.runtimeObjectQToEuler(targetRot);
+            console.log(
+                "LOG> qRotateTo",
+                debugName,
+                "p",
+                debugProgress ?? -1,
+                "orbit",
+                angle,
+                "visual",
+                visualAngle,
+                "pos",
+                mod.XComponentOf(nextPos),
+                mod.YComponentOf(nextPos),
+                mod.ZComponentOf(nextPos),
+                "rot",
+                mod.XComponentOf(debugRot),
+                mod.YComponentOf(debugRot),
+                mod.ZComponentOf(debugRot),
+            );
+        }
+    }
+
     // Commits accumulated movement and rotation to the actual object.
     ApplyTransform(): void {
         if (this.runtimeObjectIsTransform) {
@@ -166,11 +243,12 @@ export class RuntimeObject {
             const centerPos = mod.Add(this.runtimeObjectPos, this.runtimeObjectDeltaPos);
             // Final rotation after composing pending rotation.
             const finalRot = RuntimeObject.runtimeObjectQProduct(this.runtimeObjectDeltaRot, this.runtimeObjectRotState);
+            const finalEuler = this.runtimeObjectRotEulerOverride ?? RuntimeObject.runtimeObjectQToEuler(finalRot);
 
             if (this.object) {
                 // Rotates the offset by the final rotation and adds it to the rendered position.
                 const rotatedOffset = RuntimeObject.runtimeObjectQRotateVector(this.offset, finalRot);
-                mod.SetObjectTransform(this.object, mod.CreateTransform(mod.Add(centerPos, rotatedOffset), RuntimeObject.runtimeObjectQToEuler(finalRot)));
+                mod.SetObjectTransform(this.object, mod.CreateTransform(mod.Add(centerPos, rotatedOffset), finalEuler));
             }
 
             this.runtimeObjectPos = centerPos;
@@ -320,6 +398,27 @@ export class RuntimeObject {
             mod.YComponentOf(normalizedAxis) * Math.sin(halfAngle),
             mod.ZComponentOf(normalizedAxis) * Math.sin(halfAngle),
         ];
+    }
+
+    // Returns a direct yaw Euler for Y-axis rotations to avoid equivalent [pi, y, pi] forms near 90 degrees.
+    private static runtimeObjectDirectYawEuler(axis: mod.Vector, angle: number): mod.Vector | undefined {
+        const axisLengthSquared = mod.DotProduct(axis, axis);
+        if (axisLengthSquared === 0) return undefined;
+
+        const normalizedAxis = mod.Normalize(axis);
+        const axisX = Math.abs(mod.XComponentOf(normalizedAxis));
+        const axisY = mod.YComponentOf(normalizedAxis);
+        const axisZ = Math.abs(mod.ZComponentOf(normalizedAxis));
+        if (axisX > 0.0001 || axisZ > 0.0001 || Math.abs(axisY) < 0.9999) return undefined;
+
+        return mod.CreateVector(0, RuntimeObject.runtimeObjectNormalizeAngle(angle * (axisY < 0 ? -1 : 1)), 0);
+    }
+
+    // Keeps direct Euler angles in the range BF usually handles most predictably.
+    private static runtimeObjectNormalizeAngle(angle: number): number {
+        let normalized = ((angle + Math.PI) % (Math.PI * 2)) - Math.PI;
+        if (normalized <= -Math.PI) normalized += Math.PI * 2;
+        return normalized;
     }
 
     // Converts a quaternion to Euler angles for mod.SetObjectTransform.
@@ -660,19 +759,32 @@ async function runManyObjectTweens(items: ObjectTimelineItem[], options: ObjectT
     }
 }
 
-// Applies only the progress delta to RuntimeObject timeline items.
-function objectApplyRuntimeItems(items: RuntimeObjectTimelineItem[], progressDelta: number): void {
-    if (progressDelta === 0) return;
+// Applies progress to RuntimeObject timeline items.
+function objectApplyRuntimeItems(items: RuntimeObjectTimelineItem[], progressDelta: number, progressAmount: number): void {
+    if (progressDelta === 0 && !items.some((item) => item.props.qRotateTo)) return;
 
     for (const item of items) {
-        if (item.props.moveBy) {
+        if (item.props.moveBy && progressDelta !== 0) {
             item.target.Move(objectScaleVector(runtimeObjectToVector(item.props.moveBy), progressDelta));
         }
-        if (item.props.qRotateBy) {
+        if (item.props.qRotateBy && progressDelta !== 0) {
             item.target.QRotation(
                 runtimeObjectToVector(item.props.qRotateBy.axis),
                 item.props.qRotateBy.angle * progressDelta,
                 item.props.qRotateBy.rotCenter,
+            );
+        }
+        if (item.props.qRotateTo) {
+            const rotateTo = item.props.qRotateTo;
+            item.target.QRotationTo(
+                runtimeObjectToVector(rotateTo.axis),
+                rotateTo.fromAngle + (rotateTo.angle - rotateTo.fromAngle) * progressAmount,
+                rotateTo.baseAngle ?? rotateTo.fromAngle,
+                rotateTo.rotCenter,
+                rotateTo.baseCenter,
+                (rotateTo.fromVisualAngle ?? rotateTo.fromAngle) + ((rotateTo.visualAngle ?? rotateTo.angle) - (rotateTo.fromVisualAngle ?? rotateTo.fromAngle)) * progressAmount,
+                rotateTo.debugName,
+                progressAmount,
             );
         }
     }
@@ -705,7 +817,7 @@ async function runRuntimeObjectTween(items: RuntimeObjectTimelineItem[], options
     const ease = objectResolveEase(options?.ease);
 
     if (duration <= 0) {
-        objectApplyRuntimeItems(items, 1);
+        objectApplyRuntimeItems(items, 1, 1);
         return;
     }
 
@@ -720,12 +832,12 @@ async function runRuntimeObjectTween(items: RuntimeObjectTimelineItem[], options
         elapsed += waitSeconds;
         // Current eased progress.
         const amount = ease(objectClamp01(elapsed / duration));
-        objectApplyRuntimeItems(items, amount - previousAmount);
+        objectApplyRuntimeItems(items, amount - previousAmount, amount);
         previousAmount = amount;
     }
 
     if (!shouldStop() && previousAmount < 1) {
-        objectApplyRuntimeItems(items, 1 - previousAmount);
+        objectApplyRuntimeItems(items, 1 - previousAmount, 1);
     }
 }
 
