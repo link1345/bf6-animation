@@ -207,7 +207,7 @@ beforeEach(() => {
             GetPosition: 3,
         } as typeof mod.SoldierStateVector,
         SoldierStateBool: {
-            IsCrouching: 3,
+            IsCrouching: 4,
         } as typeof mod.SoldierStateBool,
         RestrictedInputs: {
             MoveForwardBack: 0,
@@ -294,7 +294,7 @@ describe("sample menu", () => {
             { x: 0, y: 0, z: 0 },
             0,
             5,
-            expect.objectContaining({ msg: "sample_menu_move_button_hint" }),
+            expect.objectContaining({ msg: stringkeys.sample_menu_move_button_hint }),
             11,
             { x: 1, y: 1, z: 1 },
             1,
@@ -373,7 +373,7 @@ describe("sample menu", () => {
         expect(modMock.EnableUIInputMode).toHaveBeenLastCalledWith(false, expect.anything());
         expect(modMock.EnableInputRestriction).toHaveBeenCalledTimes(6);
         expect(modMock.EnableInputRestriction.mock.calls.every((call) => call[2] === false)).toBe(true);
-        expect(modMock.SetUITextLabel).toHaveBeenCalledWith(widgetNamed("sample-menu-100-status"), expect.objectContaining({ msg: "sample_status_move_mode" }));
+        expect(modMock.SetUITextLabel).toHaveBeenCalledWith(widgetNamed("sample-menu-100-status"), expect.objectContaining({ msg: stringkeys.sample_status_move_mode }));
 
         modMock.EnableUIInputMode.mockClear();
         modMock.EnableInputRestriction.mockClear();
@@ -385,7 +385,7 @@ describe("sample menu", () => {
         expect(modMock.EnableUIInputMode).toHaveBeenLastCalledWith(true, expect.anything());
         expect(modMock.EnableInputRestriction).toHaveBeenCalledTimes(6);
         expect(modMock.EnableInputRestriction.mock.calls.every((call) => call[2] === true)).toBe(true);
-        expect(modMock.SetUITextLabel).toHaveBeenCalledWith(widgetNamed("sample-menu-100-status"), expect.objectContaining({ msg: "sample_menu_status_idle" }));
+        expect(modMock.SetUITextLabel).toHaveBeenCalledWith(widgetNamed("sample-menu-100-status"), expect.objectContaining({ msg: stringkeys.sample_menu_status_idle }));
     });
 
     it("maintains player mode from OngoingPlayer at an interval and stops after death", async () => {
@@ -410,7 +410,12 @@ describe("sample menu", () => {
         expect(modMock.EnableUIInputMode).not.toHaveBeenCalled();
         expect(modMock.EnableInputRestriction).not.toHaveBeenCalled();
 
-        await OnPlayerDied(createFake<mod.Player>(), createFake<mod.Player>(), createFake<mod.DeathType>(), createFake<mod.WeaponUnlock>());
+        await OnPlayerDied(
+            createFake<mod.Player>(),
+            createFake<mod.Player>(),
+            { __test: true } as unknown as mod.DeathType,
+            { __test: true } as unknown as mod.WeaponUnlock,
+        );
         now = 1400;
         await OngoingPlayer(createFake<mod.Player>());
 
@@ -518,7 +523,7 @@ describe("sample menu", () => {
         );
 
         expect(modMock.SpawnObject).toHaveBeenCalledWith(
-            mod.RuntimeSpawn_Common.Crate_01_A,
+            mod.RuntimeSpawn_Limestone.Books_01_A,
             { x: 8.8, y: 3.2, z: 23, },
             { x: 0, y: 0, z: 0 },
             { x: 1.8, y: 1.8, z: 1.8 },
@@ -538,7 +543,7 @@ describe("sample menu", () => {
         );
 
         expect(modMock.SpawnObject).toHaveBeenCalledWith(
-            mod.RuntimeSpawn_Common.Crate_01_A,
+            mod.RuntimeSpawn_Limestone.Books_01_A,
             { x: 10, y: 3.35, z: 22.2 },
             { x: 0, y: 0, z: 0 },
             { x: 2.1, y: 2.1, z: 2.1 },
@@ -587,16 +592,16 @@ describe("direct UI sample functions", () => {
         expect(modMock.SpawnObject).toHaveBeenNthCalledWith(
             1,
             mod.RuntimeSpawn_Common.Crate_01_A,
-            { x: expect.closeTo(5.6), y: 3, z: expect.closeTo(20.6) },
+            { x: expect.closeTo(6.9), y: 3, z: expect.closeTo(21.9) },
             { x: 0, y: Math.PI / 2, z: 0 },
-            { x: 2, y: 2, z: 2 },
+            { x: 1, y: 1, z: 1 },
         );
         expect(modMock.SpawnObject).toHaveBeenNthCalledWith(
             2,
             mod.RuntimeSpawn_Common.Crate_01_A,
-            { x: expect.closeTo(3), y: 3, z: expect.closeTo(20.6) },
+            { x: expect.closeTo(5.6), y: 3, z: expect.closeTo(21.9) },
             { x: 0, y: Math.PI / 2, z: 0 },
-            { x: 2, y: 2, z: 2 },
+            { x: 1, y: 1, z: 1 },
         );
         expect(modMock.SetObjectTransform).toHaveBeenCalled();
         expect(modMock.SetObjectTransform.mock.calls.map((call) => call[0])).toContain(modMock.SpawnObject.mock.results[0].value);
@@ -614,16 +619,16 @@ describe("direct UI sample functions", () => {
         expect(modMock.SpawnObject).toHaveBeenNthCalledWith(
             1,
             mod.RuntimeSpawn_Common.Crate_01_A,
-            { x: expect.closeTo(10.6), y: 3, z: expect.closeTo(24.4) },
+            { x: expect.closeTo(11.9), y: 3, z: expect.closeTo(23.1) },
             { x: 0, y: Math.PI, z: 0 },
-            { x: 2, y: 2, z: 2 },
+            { x: 1, y: 1, z: 1 },
         );
         expect(modMock.SpawnObject).toHaveBeenNthCalledWith(
             2,
             mod.RuntimeSpawn_Common.Crate_01_A,
-            { x: expect.closeTo(10.6), y: 3, z: expect.closeTo(27) },
+            { x: expect.closeTo(11.9), y: 3, z: expect.closeTo(24.4) },
             { x: 0, y: Math.PI, z: 0 },
-            { x: 2, y: 2, z: 2 },
+            { x: 1, y: 1, z: 1 },
         );
     });
 });

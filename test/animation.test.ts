@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { GravityBody, GravityWorld, objectGravityBody, runtimeObjectGravityBody, uiGravityBody } from "../mods/bf6-gravity";
 import { uiAnimate, uiTimeline } from "../mods/bf6-ui-animation";
-import { RuntimeObject, objectAnimate, objectTimeline } from "../mods/bf6-object-animation";
+import { RuntimeObject, objectAnimate, objectTimeline, type TransformableObject } from "../mods/bf6-object-animation";
 import { setupBfPortalMock, type BfPortalModMock } from "../test-support/bfportal-vitest-mock.generated";
 
 type TestVector = { x: number; y: number; z: number };
@@ -9,16 +9,16 @@ type TestVector = { x: number; y: number; z: number };
 let modMock: BfPortalModMock;
 let widget: mod.UIWidget;
 let secondWidget: mod.UIWidget;
-let object: mod.Object;
-let secondObject: mod.Object;
+let object: TransformableObject;
+let secondObject: TransformableObject;
 let spawnedObjects: mod.Object[];
 
 function fakeWidget(): mod.UIWidget {
     return { __test: true } as unknown as mod.UIWidget;
 }
 
-function fakeObject(): mod.Object {
-    return { __test: true } as unknown as mod.Object;
+function fakeObject(): TransformableObject {
+    return { __test: true } as unknown as TransformableObject;
 }
 
 function vector(x: number, y: number, z = 0): mod.Vector {
@@ -425,7 +425,7 @@ describe("objectTimeline", () => {
             .play();
 
         const transform = modMock.SetObjectTransform.mock.calls[0][1] as unknown as { position: mod.Vector; rotation: mod.Vector };
-        expect(vectorData(transform.rotation)).toEqual({ x: 0, y: visualYaw, z: 0 });
+        expect(vectorData(transform.rotation)).toEqual({ x: 0, y: expect.closeTo(visualYaw), z: 0 });
     });
 
     it("qRotateTo normalizes direct yaw euler before sending it to the game", async () => {

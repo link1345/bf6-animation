@@ -6,7 +6,7 @@ Animation helpers for BF6 Portal TypeScript. They let you animate UI and spawned
 
 The animation script files are `mods/bf6-*.ts`. In this repository, the sample implementations are in `mods/Samples.ts`, and the Portal event entry points are in `mods/Script.ts`.
 
-The API notes in this README were checked against Portal SDK 1.2.3.0 types, including `mod.Wait`, UI creation/update APIs, button events, `mod.SpawnObject`, and `mod.SetObjectTransform`.
+The API notes in this README were checked against Portal SDK 1.4.1.0 types, including `mod.Wait`, UI creation/update APIs, button events, `mod.SpawnObject`, and `mod.SetObjectTransform`.
 
 ## Questions / Support
 
@@ -19,7 +19,7 @@ https://discord.gg/Zy65k8AxH2
 ## Features
 
 - `uiTimeline()` animates UIWidget position, size, background color, alpha, text, image, and button color properties in sequence.
-- `objectTimeline()` animates `mod.Object` position, rotation, and enabled state.
+- `objectTimeline()` animates the position and rotation of object types accepted by `mod.SetObjectTransform`.
 - Passing an array to `to()` animates multiple UI widgets or objects during the same timeline step.
 - `wait()` adds a delay, `call()` runs custom logic, and `loop` repeats a timeline.
 - `RuntimeObject` creates composite objects with parent-child relationships and propagates parent movement/rotation to children.
@@ -42,7 +42,7 @@ mods/
   Script.ts                Portal event functions. Creates the sample menu and handles button input
   Samples.ts               Sample UI, object, and gravity animations
   bf6-ui-animation.ts      Timeline implementation for UIWidget
-  bf6-object-animation.ts  Timeline implementation for mod.Object and RuntimeObject
+  bf6-object-animation.ts  Timeline implementation for TransformableObject and RuntimeObject
   bf6-gravity.ts           Lightweight gravity simulation
   bf6-easings.ts           Easing functions
 dist/
@@ -81,6 +81,8 @@ In the Portal TypeScript types, `mod.Wait(n)` receives a duration in seconds and
 UI is created with `mod.AddUIContainer`, `mod.AddUIText`, `mod.AddUIImage`, and `mod.AddUIButton`, then updated with APIs such as `mod.SetUIWidgetPosition`, `mod.SetUIWidgetSize`, and `mod.SetUITextAlpha`. Button input is enabled with calls such as `mod.EnableUIButtonEvent(widget, mod.UIButtonEvent.ButtonDown, true)` and received by `OnPlayerUIButtonEvent`.
 
 Objects are spawned with `mod.SpawnObject(prefab, position, rotation, scale)` and moved/rotated with `mod.SetObjectTransform(object, mod.CreateTransform(position, rotation))`. The sample uses `mod.RuntimeSpawn_Common.Crate_01_A`.
+
+In SDK 1.4.1.0, `mod.SetObjectTransform` no longer accepts every `mod.Object`. In particular, `Player` and `Vehicle` are not transformable through this API. The object animation and gravity helpers therefore accept `TransformableObject`, derived directly from the SDK function parameter. The former `enabled` tween property was also removed because `mod.EnableSpatialObject` is no longer present in the SDK.
 
 Player-relative object positions are calculated with `mod.GetSoldierState(eventPlayer, mod.SoldierStateVector.GetPosition)` and `mod.GetSoldierState(eventPlayer, mod.SoldierStateVector.GetFacingDirection)` so boxes can spawn in front of the player.
 
@@ -359,7 +361,7 @@ const timeline = objectTimeline()
 
 ![image9](./docs/image/sample9.gif)
 
-A normal `mod.Object` is connected to `GravityWorld` to create a forward throwing arc. In world coordinates, Y is treated as upward here, so gravity is negative Y.
+A `TransformableObject` is connected to `GravityWorld` to create a forward throwing arc. In world coordinates, Y is treated as upward here, so gravity is negative Y.
 
 ```ts
 const start = sampleObjectPoint(eventPlayer, -1.4, 1.1, 3);

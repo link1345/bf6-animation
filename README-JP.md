@@ -6,7 +6,7 @@ BF6 Portal の TypeScript で、UI とスポーンオブジェクトをタイム
 
 アニメーションスクリプト本体は、 `mods/bf6-*.ts` です。サンプル実装はこのリポジトリでは `mods/Samples.ts`、Portal から呼ばれるイベント関数は `mods/Script.ts` にあります。
 
-Portal SDK 1.2.3.0 の型情報で、`mod.Wait`、UI 作成/更新 API、ボタンイベント、`mod.SpawnObject`、`mod.SetObjectTransform` などを確認しています。
+Portal SDK 1.4.1.0 の型情報で、`mod.Wait`、UI 作成/更新 API、ボタンイベント、`mod.SpawnObject`、`mod.SetObjectTransform` などを確認しています。
 
 ## Questions / Support
 
@@ -19,7 +19,7 @@ https://discord.gg/Zy65k8AxH2
 ## できること
 
 - `uiTimeline()` で UIWidget の位置、サイズ、背景色、透明度、文字、画像、ボタン色などを順番にアニメーションできます。
-- `objectTimeline()` で `mod.Object` の位置、回転、有効状態をアニメーションできます。
+- `objectTimeline()` で `mod.SetObjectTransform` が受け取るオブジェクト型の位置と回転をアニメーションできます。
 - `to()` に配列を渡すと、複数の UI やオブジェクトを同じ時間で同時に動かせます。
 - `wait()` で待ち時間、`call()` で任意処理、`loop` でループ再生を挟めます。
 - `RuntimeObject` で親子関係を持つ複合オブジェクトを作り、親の移動や回転を子へ伝播できます。
@@ -42,7 +42,7 @@ mods/
   Script.ts                Portal のイベント関数。サンプルメニューを作ってボタン入力を受け取る
   Samples.ts               UI、オブジェクト、重力のサンプルアニメーション集
   bf6-ui-animation.ts      UIWidget 用タイムライン
-  bf6-object-animation.ts  mod.Object と RuntimeObject 用タイムライン
+  bf6-object-animation.ts  TransformableObject と RuntimeObject 用タイムライン
   bf6-gravity.ts           簡易重力シミュレーション
   bf6-easings.ts           easing 関数
 dist/
@@ -81,6 +81,8 @@ Portal の TypeScript 型では、`mod.Wait(n)` は秒数を受け取って `Pro
 UI は `mod.AddUIContainer`、`mod.AddUIText`、`mod.AddUIImage`、`mod.AddUIButton` で作成し、`mod.SetUIWidgetPosition` や `mod.SetUIWidgetSize`、`mod.SetUITextAlpha` などで更新します。ボタン入力は `mod.EnableUIButtonEvent(widget, mod.UIButtonEvent.ButtonDown, true)` のように有効化し、`OnPlayerUIButtonEvent` で受け取ります。
 
 オブジェクトは `mod.SpawnObject(prefab, position, rotation, scale)` で生成し、`mod.SetObjectTransform(object, mod.CreateTransform(position, rotation))` で移動や回転を反映します。サンプルでは `mod.RuntimeSpawn_Common.Crate_01_A` を使っています。
+
+SDK 1.4.1.0 では `mod.SetObjectTransform` がすべての `mod.Object` を受け取らなくなり、特に `Player` と `Vehicle` は対象外です。そのため、オブジェクトアニメーションと重力ヘルパーは SDK 関数の引数型から直接導出した `TransformableObject` を受け取ります。また、`mod.EnableSpatialObject` が SDK から削除されたため、従来の `enabled` トゥイーンプロパティも削除しました。
 
 プレイヤー基準の位置計算では `mod.GetSoldierState(eventPlayer, mod.SoldierStateVector.GetPosition)` と `mod.GetSoldierState(eventPlayer, mod.SoldierStateVector.GetFacingDirection)` を使い、プレイヤーの前方に箱を出すようにしています。
 
@@ -362,7 +364,7 @@ const timeline = objectTimeline()
 
 ![image9](./docs/image/sample9.gif)
 
-通常の `mod.Object` に `GravityWorld` を接続して、前方へ投げるような放物線を作ります。ワールド座標の Y は上方向として扱っているため、重力は負の Y です。
+`TransformableObject` に `GravityWorld` を接続して、前方へ投げるような放物線を作ります。ワールド座標の Y は上方向として扱っているため、重力は負の Y です。
 
 ```ts
 const start = sampleObjectPoint(eventPlayer, -1.4, 1.1, 3);
