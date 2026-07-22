@@ -1,5 +1,5 @@
 import { VectorLike } from "./bf6-easings";
-import { RuntimeObject } from "./bf6-object-animation";
+import { RuntimeObject, type TransformableObject } from "./bf6-object-animation";
 
 // Common interface used by gravity code to read and write positions.
 export interface GravityTarget {
@@ -160,8 +160,8 @@ export function uiGravityBody(widget: mod.UIWidget, options?: GravityBodyOptions
     }, options);
 }
 
-// Creates an adapter that treats a normal mod.Object as a GravityBody target.
-export function objectGravityBody(object: mod.Object, options?: GravityBodyOptions): GravityBody {
+// Creates an adapter that treats an SDK-transformable object as a GravityBody target.
+export function objectGravityBody(object: TransformableObject, options?: GravityBodyOptions): GravityBody {
     return new GravityBody({
         getPosition: () => mod.GetObjectPosition(object),
         setPosition: (position) => mod.SetObjectTransform(object, mod.CreateTransform(position, mod.GetObjectRotation(object))),

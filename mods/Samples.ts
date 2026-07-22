@@ -1,5 +1,5 @@
 import { GravityWorld, objectGravityBody, runtimeObjectGravityBody, uiGravityBody } from "./bf6-gravity";
-import { RuntimeObject, RuntimeObjectPrefab, objectTimeline } from "./bf6-object-animation";
+import { RuntimeObject, RuntimeObjectPrefab, objectTimeline, type TransformableObject } from "./bf6-object-animation";
 import { uiTimeline, type TweenProps, type UITimelineItem } from "./bf6-ui-animation";
 
 // Prefab type used by the object sample functions.
@@ -126,13 +126,13 @@ function addText(name: string, parent: mod.UIWidget, messageKey: string, positio
 }
 
 // Spawns a sample object when a prefab is available.
-function spawnSampleObject(prefab: SampleObjectPrefab | undefined, position: mod.Vector, rotation: mod.Vector, scale: mod.Vector): mod.Object | undefined {
+function spawnSampleObject(prefab: SampleObjectPrefab | undefined, position: mod.Vector, rotation: mod.Vector, scale: mod.Vector): TransformableObject | undefined {
     if (prefab === undefined) {
         console.log("LOG> BF6 animation object sample skipped. Pass a RuntimeSpawn prefab to run this sample.");
         return undefined;
     }
 
-    return mod.SpawnObject(prefab, position, rotation, scale) as mod.Object;
+    return mod.SpawnObject(prefab, position, rotation, scale) as TransformableObject;
 }
 
 // Demonstrates object position tweening through several player-relative points.

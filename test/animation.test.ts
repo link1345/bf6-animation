@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { GravityBody, GravityWorld, objectGravityBody, runtimeObjectGravityBody, uiGravityBody } from "../mods/bf6-gravity";
 import { uiAnimate, uiTimeline } from "../mods/bf6-ui-animation";
-import { RuntimeObject, objectAnimate, objectTimeline } from "../mods/bf6-object-animation";
+import { RuntimeObject, objectAnimate, objectTimeline, type TransformableObject } from "../mods/bf6-object-animation";
 import { setupBfPortalMock, type BfPortalModMock } from "../test-support/bfportal-vitest-mock.generated";
 
 type TestVector = { x: number; y: number; z: number };
@@ -9,16 +9,16 @@ type TestVector = { x: number; y: number; z: number };
 let modMock: BfPortalModMock;
 let widget: mod.UIWidget;
 let secondWidget: mod.UIWidget;
-let object: mod.Object;
-let secondObject: mod.Object;
+let object: TransformableObject;
+let secondObject: TransformableObject;
 let spawnedObjects: mod.Object[];
 
 function fakeWidget(): mod.UIWidget {
     return { __test: true } as unknown as mod.UIWidget;
 }
 
-function fakeObject(): mod.Object {
-    return { __test: true } as unknown as mod.Object;
+function fakeObject(): TransformableObject {
+    return { __test: true } as unknown as TransformableObject;
 }
 
 function vector(x: number, y: number, z = 0): mod.Vector {
@@ -315,14 +315,6 @@ describe("objectTimeline", () => {
         expect(modMock.Wait).toHaveBeenCalledTimes(1);
         expect(modMock.SetObjectTransform).toHaveBeenCalledWith(object, expect.anything());
         expect(modMock.SetObjectTransform).toHaveBeenCalledWith(secondObject, expect.anything());
-    });
-
-    it("enables objects at the start and disables objects at the end", async () => {
-        await objectAnimate(object).to({ enabled: true, x: 20 }, { duration: 0 });
-        await objectAnimate(secondObject).to({ enabled: false, x: 30 }, { duration: 0 });
-
-        expect(modMock.EnableSpatialObject.mock.calls[0]).toEqual([object, true]);
-        expect(modMock.EnableSpatialObject.mock.calls[modMock.EnableSpatialObject.mock.calls.length - 1]).toEqual([secondObject, false]);
     });
 
     it("stops before running remaining steps", async () => {

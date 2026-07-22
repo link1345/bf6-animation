@@ -3,6 +3,9 @@ import { VectorLike, EaseFunction, EaseName, eases } from "./bf6-easings";
 // Alias for the prefab type accepted by mod.SpawnObject.
 export type RuntimeObjectPrefab = Parameters<typeof mod.SpawnObject>[0];
 
+// Object types accepted by the SDK transform API. Player and Vehicle are intentionally excluded in SDK 1.4.1.0.
+export type TransformableObject = Parameters<typeof mod.SetObjectTransform>[0];
+
 // Internal quaternion tuple stored as [w, x, y, z].
 type RuntimeObjectQuaternion = [number, number, number, number];
 
@@ -31,8 +34,8 @@ export interface RuntimeObjectTimelineItem {
 
 // Runtime object that handles parent-child links, relative movement, and quaternion rotation.
 export class RuntimeObject {
-    // Spawned mod.Object; undefined when no prefab was provided.
-    readonly object: mod.Object | undefined;
+    // Spawned transformable object; undefined when no prefab was provided.
+    readonly object: TransformableObject | undefined;
     // ID of the mod.Object; undefined when no prefab was provided.
     readonly id: number | undefined;
     // Prefab used for spawning.
@@ -106,7 +109,7 @@ export class RuntimeObject {
                 mod.Add(this.runtimeObjectPos, RuntimeObject.runtimeObjectQRotateVector(this.offset, this.runtimeObjectRotState)),
                 RuntimeObject.runtimeObjectQToEuler(this.runtimeObjectRotState),
                 runtimeObjectToVector(scale),
-            ) as mod.Object;
+            ) as TransformableObject;
             this.id = this.object === undefined ? undefined : mod.GetObjId(this.object);
         } else {
             this.object = undefined;
@@ -331,7 +334,7 @@ export class RuntimeObject {
     }
 }
 
-// Properties that can be animated on a normal mod.Object.
+// Properties that can be animated on an SDK-transformable object.
 export interface ObjectTweenProps {
     // Changes only the X coordinate.
     x?: number;
@@ -349,8 +352,6 @@ export interface ObjectTweenProps {
     roll?: number;
     // Changes the full rotation vector.
     rotation?: VectorLike;
-    // Toggles the SpatialObject enabled state.
-    enabled?: boolean;
 }
 
 // Settings for duration, easing, and update interval of one object tween.
@@ -385,15 +386,15 @@ export interface ObjectPhysicsOptions {
 
 // Target and properties used when tweening multiple objects together.
 export interface ObjectTimelineItem {
-    // mod.Object targeted by the animation.
-    target: mod.Object;
+    // SDK-transformable object targeted by the animation.
+    target: TransformableObject;
     // Tween properties applied to the target.
     props: ObjectTweenProps;
 }
 
 // API for queueing and playing Object and RuntimeObject animation steps in order.
 export interface ObjectTimeline {
-    to(object: mod.Object, props: ObjectTweenProps, options?: ObjectTweenOptions): ObjectTimeline;
+    to(object: TransformableObject, props: ObjectTweenProps, options?: ObjectTweenOptions): ObjectTimeline;
     to(items: ObjectTimelineItem[], options?: ObjectTweenOptions): ObjectTimeline;
     to(object: RuntimeObject, props: RuntimeObjectTweenProps, options?: ObjectTweenOptions): ObjectTimeline;
     to(items: RuntimeObjectTimelineItem[], options?: ObjectTweenOptions): ObjectTimeline;
@@ -416,7 +417,7 @@ type ObjectVectorTween = {
 
 // Internal type for one queued ObjectTimeline step.
 type ObjectTimelineStep =
-    | { type: "to"; object: mod.Object; props: ObjectTweenProps; options?: ObjectTweenOptions }
+    | { type: "to"; object: TransformableObject; props: ObjectTweenProps; options?: ObjectTweenOptions }
     | { type: "toMany"; items: ObjectTimelineItem[]; options?: ObjectTweenOptions }
     | { type: "runtimeTo"; items: RuntimeObjectTimelineItem[]; options?: ObjectTweenOptions }
     | { type: "physics"; world: ObjectPhysicsStepper; options?: ObjectPhysicsOptions }
@@ -533,7 +534,7 @@ function buildObjectRotationTarget(current: mod.Vector, props: ObjectTweenProps)
 }
 
 // Converts ObjectTweenProps into vector tweens with current values.
-function buildObjectTweens(object: mod.Object, props: ObjectTweenProps): ObjectVectorTween[] {
+function buildObjectTweens(object: TransformableObject, props: ObjectTweenProps): ObjectVectorTween[] {
     // List of vector tweens for position, rotation, and similar values.
     const vectors: ObjectVectorTween[] = [];
     // Current transform.
@@ -583,12 +584,8 @@ function applyObjectTweens(vectors: ObjectVectorTween[], amount: number): void {
     }
 }
 
-// Runs a tween for one mod.Object.
-async function runObjectTween(object: mod.Object, props: ObjectTweenProps, options: ObjectTweenOptions | undefined, shouldStop: () => boolean): Promise<void> {
-    if (props.enabled === true) {
-        mod.EnableSpatialObject(object as mod.SpatialObject, true);
-    }
-
+// Runs a tween for one SDK-transformable object.
+async function runObjectTween(object: TransformableObject, props: ObjectTweenProps, options: ObjectTweenOptions | undefined, shouldStop: () => boolean): Promise<void> {
     // Playback duration in seconds.
     const duration = options?.duration ?? objectDefaultTweenOptions.duration;
     // Time interval between value updates.
@@ -600,7 +597,6 @@ async function runObjectTween(object: mod.Object, props: ObjectTweenProps, optio
 
     if (duration <= 0) {
         applyObjectTweens(vectors, 1);
-        if (props.enabled === false) mod.EnableSpatialObject(object as mod.SpatialObject, false);
         return;
     }
 
@@ -618,16 +614,11 @@ async function runObjectTween(object: mod.Object, props: ObjectTweenProps, optio
 
     if (!shouldStop()) {
         applyObjectTweens(vectors, 1);
-        if (props.enabled === false) mod.EnableSpatialObject(object as mod.SpatialObject, false);
     }
 }
 
-// Runs tweens for multiple mod.Objects on the same timeline.
+// Runs tweens for multiple SDK-transformable objects on the same timeline.
 async function runManyObjectTweens(items: ObjectTimelineItem[], options: ObjectTweenOptions | undefined, shouldStop: () => boolean): Promise<void> {
-    for (const item of items) {
-        if (item.props.enabled === true) mod.EnableSpatialObject(item.target as mod.SpatialObject, true);
-    }
-
     // Playback duration in seconds.
     const duration = options?.duration ?? objectDefaultTweenOptions.duration;
     // Time interval between value updates.
@@ -640,7 +631,6 @@ async function runManyObjectTweens(items: ObjectTimelineItem[], options: ObjectT
     if (duration <= 0) {
         for (const entry of built) {
             applyObjectTweens(entry.vectors, 1);
-            if (entry.item.props.enabled === false) mod.EnableSpatialObject(entry.item.target as mod.SpatialObject, false);
         }
         return;
     }
@@ -666,7 +656,6 @@ async function runManyObjectTweens(items: ObjectTimelineItem[], options: ObjectT
     if (!shouldStop()) {
         for (const entry of built) {
             applyObjectTweens(entry.vectors, 1);
-            if (entry.item.props.enabled === false) mod.EnableSpatialObject(entry.item.target as mod.SpatialObject, false);
         }
     }
 }
@@ -761,7 +750,7 @@ async function runObjectPhysics(world: ObjectPhysicsStepper, options: ObjectPhys
 }
 
 // Returns a small helper API for tweening a single object.
-export function objectAnimate(object: mod.Object): { to(props: ObjectTweenProps, options?: ObjectTweenOptions): Promise<void> } {
+export function objectAnimate(object: TransformableObject): { to(props: ObjectTweenProps, options?: ObjectTweenOptions): Promise<void> } {
     return {
         to(props: ObjectTweenProps, options?: ObjectTweenOptions) {
             return runObjectTween(object, props, options, () => false);
@@ -780,7 +769,7 @@ export function objectTimeline(options?: ObjectTimelineOptions): ObjectTimeline 
 
     // ObjectTimeline control object returned to callers.
     const api: ObjectTimeline = {
-        to(target: mod.Object | RuntimeObject | ObjectTimelineItem[] | RuntimeObjectTimelineItem[], propsOrOptions?: ObjectTweenProps | RuntimeObjectTweenProps | ObjectTweenOptions, tweenOptions?: ObjectTweenOptions) {
+        to(target: TransformableObject | RuntimeObject | ObjectTimelineItem[] | RuntimeObjectTimelineItem[], propsOrOptions?: ObjectTweenProps | RuntimeObjectTweenProps | ObjectTweenOptions, tweenOptions?: ObjectTweenOptions) {
             if (Array.isArray(target)) {
                 if (target.length > 0 && target[0].target instanceof RuntimeObject) {
                     steps.push({ type: "runtimeTo", items: target as RuntimeObjectTimelineItem[], options: { ...options, ...(propsOrOptions as ObjectTweenOptions | undefined) } });
